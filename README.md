@@ -127,3 +127,51 @@ Never place Proxmox secrets, passwords or recovery tokens in Discord messages, s
 ### Important deployment note
 
 The repository is a production-oriented foundation, not a claim that every external provider is configured automatically. Proxmox templates, network/IP allocation, Pterodactyl panel credentials, email delivery, DNS and payment gateways are environment/provider-specific and must be configured before those integrations can be activated.
+
+
+## Provider support
+
+### VPS / LXC
+- QEMU VPS plans use a prepared Proxmox VM template.
+- LXC plans use a prepared Proxmox CT template by setting the plan provider to `lxc`.
+- Owner command: `.admin-plan-provider <plan> <qemu|lxc>`.
+- Configure `PROXMOX_TEMPLATE_VMID` for QEMU and `PROXMOX_TEMPLATE_CTID` for LXC.
+- Automatic expiry stops the resource and marks it expired.
+
+### Minecraft
+Minecraft plans default to the Pterodactyl provider. Configure:
+
+```env
+PTERODACTYL_URL=https://panel.example.com
+PTERODACTYL_API_KEY=...
+PTERODACTYL_NEST_ID=...
+PTERODACTYL_EGG_ID=...
+PTERODACTYL_LOCATION_ID=...
+PTERODACTYL_DOCKER_IMAGE=ghcr.io/pterodactyl/yolks:java_21
+PTERODACTYL_STARTUP=java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}} nogui
+```
+
+The bot creates/reuses a non-admin Pterodactyl user, creates the server with the plan's RAM/CPU/disk limits, records the provider resource, and suspends it automatically after expiry.
+
+### Administration
+- `.admin-plan-cost <plan> <hzl>`
+- `.admin-plan-toggle <plan> <0|1>`
+- `.admin-plan-provider <plan> <qemu|lxc|pterodactyl>`
+- `.admin-node-add <name> <node> <location> <api_url>`
+- `.admin-node-toggle <name> <0|1>`
+- `.admin-nodes`
+
+### User hosting
+- `.mc-plans`
+- `.vps-plans`
+- `.redeem <plan>`
+- `.my-redemptions`
+- `.myvps`
+- `.vps-info <id>`
+- `.vps-start <id>`
+- `.vps-stop <id>`
+- `.vps-shutdown <id>`
+- `.vps-restart <id>`
+- `.vps-delete <id> CONFIRM`
+
+Destructive deletion requires the explicit `CONFIRM` argument and verifies ownership before deleting the provider resource.
