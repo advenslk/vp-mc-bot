@@ -11,6 +11,8 @@ from discord.ext import commands, tasks
 from config.settings import load_settings
 from core.database import Database
 from economy.service import EconomyService
+from hosting.service import HostingService
+from hosting.provisioner import ProvisioningService
 
 
 class HelzerXBot(commands.Bot):
@@ -30,6 +32,8 @@ class HelzerXBot(commands.Bot):
         )
         self.db = Database(self.settings.database_path)
         self.economy = EconomyService(self.db)
+        self.hosting = HostingService(self.db, self.economy)
+        self.provisioner = ProvisioningService(self)
         self.invite_cache: dict[int, dict[str, int]] = {}
         self.voice_started: dict[int, datetime] = {}
         self.logger = logging.getLogger("helzerx")
@@ -42,6 +46,7 @@ class HelzerXBot(commands.Bot):
         await self.load_extension("hosting_commands")
         await self.load_extension("community_commands")
         self.voice_rewards.start()
+        self.provisioning_loop.start()
 
     async def seed_defaults(self) -> None:
         plans = [
@@ -156,6 +161,17 @@ class HelzerXBot(commands.Bot):
                 self.settings.message_reward_cooldown, "message_activity",
             )
         await self.process_commands(message)
+
+    @tasks.loop(seconds=20)
+    async def provisioning_loop(self) -> None:
+        try:
+            await self.provisioner.run_once()
+        except Exception:
+            self.logger.exception("Provisioning loop error")
+
+    @provisioning_loop.before_loop
+    async def before_provisioning_loop(self) -> None:
+        await self.wait_until_ready()
 
     @tasks.loop(minutes=10)
     async def voice_rewards(self) -> None:
