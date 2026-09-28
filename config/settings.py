@@ -40,6 +40,7 @@ class Settings:
     proxmox_verify_ssl: bool
     proxmox_default_node: str | None
     proxmox_api_url: str | None
+    proxmox_public_url: str | None
     proxmox_token_id: str | None
     proxmox_token_secret: str | None
     proxmox_template_vmid: int | None
@@ -97,6 +98,7 @@ def load_settings() -> Settings:
         proxmox_verify_ssl=os.getenv("PROXMOX_VERIFY_SSL", "false").lower() in {"1", "true", "yes"},
         proxmox_default_node=os.getenv("PROXMOX_DEFAULT_NODE") or None,
         proxmox_api_url=os.getenv("PROXMOX_API_URL") or None,
+        proxmox_public_url=os.getenv("PROXMOX_PUBLIC_URL") or os.getenv("PROXMOX_API_URL") or None,
         proxmox_token_id=os.getenv("PROXMOX_TOKEN_ID") or None,
         proxmox_token_secret=os.getenv("PROXMOX_TOKEN_SECRET") or None,
         proxmox_template_vmid=_optional_int("PROXMOX_TEMPLATE_VMID"),
