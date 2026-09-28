@@ -24,6 +24,7 @@ class EconomyCog(commands.Cog):
         balance = await self.economy.balance(ctx.author.id)
         invites = await self.economy.invite_count(ctx.guild.id, ctx.author.id)
         recent = await self.economy.recent_summary(ctx.author.id)
+        await self.economy.unlock_achievement(ctx.author.id, "first_profile")
         await ctx.send(view=wallet_view(ctx.author.display_name, balance, invites, recent))
 
     @commands.command(name="balance", aliases=("bal", "hzl"))
@@ -49,6 +50,7 @@ class EconomyCog(commands.Cog):
                 discord.Colour.orange()
             ))
             return
+        await self.economy.unlock_achievement(ctx.author.id, "first_daily")
         await ctx.send(view=simple_view(
             "# %s Daily Reward Claimed" % e("gift", "◆"),
             "You received **+%s HZL**. Your balance is now **%s HZL**."
@@ -91,6 +93,31 @@ class EconomyCog(commands.Cog):
         )
         await ctx.send(view=simple_view("# HZL Leaderboard", body))
 
+
+    @commands.command(name="quests", aliases=("quest",))
+    @commands.guild_only()
+    async def quests(self, ctx: commands.Context) -> None:
+        await self._ensure(ctx)
+        rows = await self.economy.quests(ctx.author.id)
+        body = "\n".join(
+            "• **%s** — %s/%s%s\n  %s · +%s HZL"
+            % (r["name"], r["progress"], r["target"], " ✓" if r["completed"] else "",
+               r["description"], format(r["reward"], ","))
+            for r in rows
+        ) or "No active quests."
+        await ctx.send(view=simple_view("# HZL Quests", body))
+
+    @commands.command(name="achievements", aliases=("achievements-list",))
+    async def achievements(self, ctx: commands.Context) -> None:
+        await self._ensure(ctx)
+        rows = await self.economy.achievements(ctx.author.id)
+        body = "\n".join(
+            "• **%s** — %s%s"
+            % (r["name"], "Unlocked" if r["unlocked_at"] else "Locked",
+               (" · +%s HZL" % format(r["reward"], ",")) if r["reward"] else "")
+            for r in rows
+        ) or "No achievements configured."
+        await ctx.send(view=simple_view("# HZL Achievements", body))
 
 class HostingCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
