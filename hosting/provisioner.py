@@ -199,7 +199,7 @@ class ProvisioningService:
                     int(node_id["id"]) if node_id else None, vmid, hostname, kind,
                     "active", "template", (datetime.now(timezone.utc)+timedelta(days=int(row["duration_days"]))).isoformat(),
                     str(vmid), vps_username,
-                    json.dumps({"node": node_name, "provider": provider}, separators=(",", ":")),
+                    json.dumps({"node": node_name, "cluster": cluster_name, "provider": provider}, separators=(",", ":")),
                 ),
             )
             server_id = cur.lastrowid
