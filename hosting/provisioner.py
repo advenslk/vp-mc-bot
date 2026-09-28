@@ -119,6 +119,9 @@ class ProvisioningService:
             await self.provision_minecraft(row, hostname)
             return
 
+        vps_username = "root"
+        vps_password = secrets.token_urlsafe(15)
+
         if provider == "lxc":
             if not settings.proxmox_template_ctid:
                 raise ProxmoxError("PROXMOX_TEMPLATE_CTID is required for LXC plans.")
@@ -131,6 +134,7 @@ class ProvisioningService:
                 "hostname": hostname,
                 "onboot": 1,
                 "cores": int(row["cpu_units"]),
+                "password": vps_password,
             }
             if settings.proxmox_bridge:
                 config["net0"] = "name=eth0,bridge=%s,ip=dhcp" % settings.proxmox_bridge
@@ -160,13 +164,14 @@ class ProvisioningService:
         async with self.db.transaction() as db:
             cur = await db.execute(
                 """INSERT INTO vps_servers
-                   (user_id,plan_id,node_id,vmid,hostname,kind,status,os,expires_at,provider_id,metadata)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                   (user_id,plan_id,node_id,vmid,hostname,kind,status,os,expires_at,provider_id,username,metadata)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     int(row["user_id"]), await self.plan_id(db, str(row["plan_key"])),
                     int(node_id["id"]) if node_id else None, vmid, hostname, kind,
                     "active", "template", (datetime.now(timezone.utc)+timedelta(days=int(row["duration_days"]))).isoformat(),
-                    str(vmid), json.dumps({"node": node_name, "provider": provider}, separators=(",", ":")),
+                    str(vmid), vps_username,
+                    json.dumps({"node": node_name, "provider": provider}, separators=(",", ":")),
                 ),
             )
             server_id = cur.lastrowid
@@ -189,12 +194,18 @@ class ProvisioningService:
         if user:
             try:
                 await user.send(
-                    "## HelzerX Cloud — VPS Provisioned\n"
-                    "Your VPS **%s** has been created.\n\n"
-                    "• Plan: **%s**\n• VMID: **%s**\n• Node: **%s**\n"
-                    "• RAM: **%s MB**\n• CPU: **%s cores**\n• Storage: **%s GB**\n\n"
-                    "Network credentials depend on your configured cloud-init template."
-                    % (hostname, row["plan_key"], vmid, node_name, row["ram_mb"], row["cpu_units"], row["storage_gb"])
+                    "## HelzerX Cloud — VPS Ready\n"
+                    "Your **%s** VPS has been provisioned successfully.\n\n"
+                    "### Proxmox Access\n"
+                    "• Panel: **%s**\n• Node: **%s**\n• VMID: **%s**\n\n"
+                    "### VPS Login\n"
+                    "• Username: `%s`\n• Password: `%s`\n• Hostname: `%s`\n\n"
+                    "### Resources\n"
+                    "• Plan: **%s**\n• RAM: **%s MB**\n• CPU: **%s cores**\n• Storage: **%s GB**\n\n"
+                    "Keep this message private and change the password after your first login."
+                    % (hostname, settings.proxmox_public_url or settings.proxmox_api_url or "Configured Proxmox endpoint",
+                       node_name, vmid, vps_username, vps_password, hostname, row["plan_key"],
+                       row["ram_mb"], row["cpu_units"], row["storage_gb"])
                 )
             except Exception:
                 self.logger.warning("Could not DM provisioning result to user %s", row["user_id"])
