@@ -85,3 +85,45 @@ The repository is designed to grow into:
 - Web API
 - Notifications and expiry automation
 - Backups, metrics, health checks and operational audit tooling
+
+
+## Current production foundation
+
+The bot now includes:
+
+- HZL wallet, atomic ledger, daily rewards, message/voice reward cooldowns and daily activity caps.
+- Verified invite tracking with database-driven milestones.
+- Database-driven quests and achievements.
+- Minecraft and VPS plan catalog with owner-controlled HZL redemption costs.
+- Atomic redemption reservations with automatic refund on provisioning failure.
+- Proxmox API integration using API tokens.
+- Capacity-aware automatic node selection when no default node is configured.
+- Template-based automatic VPS cloning, resource assignment and startup.
+- VPS ownership checks plus start/stop/shutdown/reboot/status/list commands.
+- Provisioning jobs with idempotency keys and retry-safe state transitions.
+- Argon2id password hashing, email verification token primitives and Discord/account link schema.
+- Discord Components V2 UI, Docker deployment and GitHub CI.
+
+### Automatic VPS provisioning
+
+Configure a prepared Proxmox cloud-init/template VM and the following variables:
+
+```env
+PROXMOX_API_URL=https://your-proxmox:8006
+PROXMOX_TOKEN_ID=...
+PROXMOX_TOKEN_SECRET=...
+PROXMOX_TEMPLATE_VMID=9000
+PROXMOX_STORAGE=local-lvm
+PROXMOX_BRIDGE=vmbr0
+PROXMOX_START=true
+```
+
+The template should already have a supported OS, cloud-init/network configuration and a working disk layout. The bot does not create arbitrary operating-system images or expose Proxmox root credentials.
+
+### Security model
+
+Never place Proxmox secrets, passwords or recovery tokens in Discord messages, source code or Git history. Use a dedicated Proxmox API token with only the permissions required for provisioning and lifecycle actions. Email verification/account delivery still requires an SMTP or transactional-email provider before it can be exposed through a public web UI.
+
+### Important deployment note
+
+The repository is a production-oriented foundation, not a claim that every external provider is configured automatically. Proxmox templates, network/IP allocation, Pterodactyl panel credentials, email delivery, DNS and payment gateways are environment/provider-specific and must be configured before those integrations can be activated.
