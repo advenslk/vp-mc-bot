@@ -74,7 +74,7 @@ class HostingService:
             row = await (await db.execute(
                 "SELECT user_id,cost,status FROM redemptions WHERE id=?", (redemption_id,)
             )).fetchone()
-            if not row or row["status"] != "pending":
+            if not row or row["status"] not in {"pending", "provisioning"}:
                 return
             user_id, cost = int(row["user_id"]), int(row["cost"])
             wallet = await (await db.execute(
@@ -101,6 +101,6 @@ class HostingService:
     async def complete(self, redemption_id: int, provider_resource_id: str) -> None:
         await self.db.execute(
             """UPDATE redemptions SET status='completed',provider_resource_id=?,
-               completed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'""",
+               completed_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('pending','provisioning')""",
             (provider_resource_id, redemption_id),
         )
