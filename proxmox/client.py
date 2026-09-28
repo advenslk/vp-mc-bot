@@ -109,8 +109,25 @@ class ProxmoxClient:
         )
 
     async def next_vmid(self) -> int:
-        value = await self.request("GET", "cluster/nextid")
-        return int(value)
+        """Return a free VMID without depending on /cluster/nextid."""
+        resources = await self.cluster_resources()
+
+        used: set[int] = set()
+        for item in resources if isinstance(resources, list) else []:
+            if not isinstance(item, dict) or item.get("type") not in {"qemu", "lxc"}:
+                continue
+            try:
+                used.add(int(item["vmid"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+
+        candidate = max(100, max(used, default=99) + 1)
+        while candidate in used:
+            candidate += 1
+
+        if candidate > 999_999_999:
+            raise ProxmoxError("No free VMID is available in the Proxmox VMID range.")
+        return candidate
 
     async def vm_action(self, node: str, vmid: int, action: str) -> Any:
         if action not in {"start", "stop", "shutdown", "reboot", "reset"}:
