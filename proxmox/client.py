@@ -85,10 +85,26 @@ class ProxmoxClient:
         return await self.request("POST", "nodes/%s/qemu/%s/clone" % (node, template_vmid), **params)
 
     async def clone_container(self, node: str, template_vmid: int, newid: int, hostname: str, storage: str | None = None) -> Any:
+        """Clone an LXC template.
+
+        Proxmox may require VM.Clone on the source template path (/vms/<vmid>).
+        The API client deliberately does not try to bypass that permission; the
+        configured API token must be granted the required ACL by the operator.
+        """
         params = {"newid": newid, "hostname": hostname}
         if storage:
             params["storage"] = storage
-        return await self.request("POST", "nodes/%s/lxc/%s/clone" % (node, template_vmid), **params)
+        try:
+            return await self.request("POST", "nodes/%s/lxc/%s/clone" % (node, template_vmid), **params)
+        except ProxmoxError as exc:
+            message = str(exc)
+            if "VM.Clone" in message and "/vms/%s" % template_vmid in message:
+                raise ProxmoxError(
+                    "Proxmox API token lacks VM.Clone permission on /vms/%s. "
+                    "Grant VM.Clone on the LXC template (/vms/%s) and retry the existing queued job."
+                    % (template_vmid, template_vmid)
+                ) from exc
+            raise
 
     async def set_container_config(self, node: str, vmid: int, config: dict[str, Any]) -> Any:
         return await self.request("PUT", "nodes/%s/lxc/%s/config" % (node, vmid), **config)
