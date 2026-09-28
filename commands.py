@@ -242,6 +242,36 @@ class AdminCog(commands.Cog):
         )
         await ctx.send(view=simple_view("# Plan Updated", "%s · $%.2f · %s HZL · %s days" % (key, price_usd, hzl_cost, duration_days)))
 
+    @commands.command(name="admin-plan-target")
+    async def admin_plan_target(self, ctx: commands.Context, plan_key: str, cluster: str, node: str = "") -> None:
+        if not await self._owner(ctx):
+            await ctx.send(view=simple_view("# Permission Denied", "This command is restricted to bot owners.", discord.Colour.red()))
+            return
+        key = plan_key.upper()
+        row = await self.bot.db.fetchone("SELECT metadata FROM plans WHERE plan_key=?", (key,))
+        if not row:
+            await ctx.send(view=simple_view("# Plan Not Found", "Unknown plan key.", discord.Colour.orange()))
+            return
+        import json
+        try:
+            metadata = json.loads(row["metadata"] or "{}")
+        except (TypeError, ValueError):
+            metadata = {}
+        metadata["cluster"] = cluster
+        if node:
+            metadata["node"] = node
+        else:
+            metadata.pop("node", None)
+        await self.bot.db.execute(
+            "UPDATE plans SET metadata=?,updated_at=CURRENT_TIMESTAMP WHERE plan_key=?",
+            (json.dumps(metadata, separators=(",", ":")), key),
+        )
+        await self.bot.db.execute(
+            "INSERT INTO audit_logs(actor_id,action,target_id,details) VALUES(?,?,?,?)",
+            (ctx.author.id, "plan.target.update", key, "cluster=%s,node=%s" % (cluster, node or "auto")),
+        )
+        await ctx.send(view=simple_view("# Plan Target Updated", "%s → cluster **%s** · node **%s**" % (key, cluster, node or "automatic")))
+
     @commands.command(name="admin-plan-toggle")
     async def admin_plan_toggle(self, ctx: commands.Context, plan_key: str, enabled: int) -> None:
         if not await self._owner(ctx):
