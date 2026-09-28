@@ -173,6 +173,39 @@ class AdminCog(commands.Cog):
         ))
 
 
+    @commands.command(name="admin-plan-cost")
+    async def admin_plan_cost(self, ctx: commands.Context, plan_key: str, hzl_cost: int) -> None:
+        if not await self._owner(ctx):
+            await ctx.send(view=simple_view("# Permission Denied", "This command is restricted to bot owners.", discord.Colour.red()))
+            return
+        if hzl_cost < 0:
+            await ctx.send(view=simple_view("# Invalid Cost", "HZL cost cannot be negative.", discord.Colour.orange()))
+            return
+        row = await self.bot.db.fetchone("SELECT plan_key FROM plans WHERE plan_key=?", (plan_key.upper(),))
+        if not row:
+            await ctx.send(view=simple_view("# Plan Not Found", "Unknown plan key.", discord.Colour.orange()))
+            return
+        await self.bot.db.execute("UPDATE plans SET hzl_cost=?,updated_at=CURRENT_TIMESTAMP WHERE plan_key=?",
+                                  (hzl_cost, plan_key.upper()))
+        await self.bot.db.execute("INSERT INTO audit_logs(actor_id,action,target_id,details) VALUES(?,?,?,?)",
+                                  (ctx.author.id, "plan.cost.update", plan_key.upper(), str(hzl_cost)))
+        await ctx.send(view=simple_view("# Plan Updated", "%s now costs **%s HZL** for redemption." %
+                                         (plan_key.upper(), format(hzl_cost, ","))))
+
+    @commands.command(name="admin-plan-toggle")
+    async def admin_plan_toggle(self, ctx: commands.Context, plan_key: str, enabled: int) -> None:
+        if not await self._owner(ctx):
+            await ctx.send(view=simple_view("# Permission Denied", "This command is restricted to bot owners.", discord.Colour.red()))
+            return
+        if enabled not in (0, 1):
+            await ctx.send(view=simple_view("# Invalid Value", "Use 1 to enable or 0 to disable.", discord.Colour.orange()))
+            return
+        await self.bot.db.execute("UPDATE plans SET enabled=?,updated_at=CURRENT_TIMESTAMP WHERE plan_key=?",
+                                  (enabled, plan_key.upper()))
+        await ctx.send(view=simple_view("# Plan Status Updated", "%s is now %s." %
+                                         (plan_key.upper(), "enabled" if enabled else "disabled")))
+
+
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(EconomyCog(bot))
     await bot.add_cog(HostingCog(bot))
