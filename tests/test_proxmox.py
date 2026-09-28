@@ -40,3 +40,19 @@ def test_docker_compose_runtime_configuration():
     assert "apparmor=unconfined" in compose
     assert "security_opt:" in compose
     assert "user: root" in compose
+
+
+def test_database_initializes_and_writes(tmp_path):
+    from core.database import Database
+
+    async def run():
+        db = Database(str(tmp_path / "helzerx.db"))
+        await db.initialize()
+        await db.execute(
+            "CREATE TABLE IF NOT EXISTS _write_test (id INTEGER PRIMARY KEY, value TEXT)"
+        )
+        await db.execute("INSERT INTO _write_test(value) VALUES(?)", ("ok",))
+        row = await db.fetchone("SELECT value FROM _write_test WHERE id=1")
+        assert row["value"] == "ok"
+
+    asyncio.run(run())
