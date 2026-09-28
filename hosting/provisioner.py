@@ -23,17 +23,9 @@ class ProvisioningService:
         self.settings = bot.settings
         self.logger = logging.getLogger("helzerx.provisioning")
 
-    def client(self) -> ProxmoxClient | None:
-        s = self.settings
-        if not all((s.proxmox_api_url, s.proxmox_token_id, s.proxmox_token_secret)):
-
-            return None
-        return ProxmoxClient(ProxmoxConfig(
-            base_url=s.proxmox_api_url,
-            token_id=s.proxmox_token_id,
-            token_secret=s.proxmox_token_secret,
-            verify_ssl=s.proxmox_verify_ssl,
-        ))
+    def client(self, cluster_name=None) -> ProxmoxClient | None:
+        from proxmox.client import client_from_settings
+        return client_from_settings(self.settings, cluster_name)
 
     async def enqueue_pending(self) -> None:
         rows = await self.db.fetchall(
@@ -94,7 +86,7 @@ class ProvisioningService:
         except (TypeError, ValueError):
             plan_metadata = {}
         cluster_name = str(plan_metadata.get("cluster") or settings.proxmox_default_node or "") or None
-        client = self.client(cluster_name) if client is not None else self.client(cluster_name)
+        client = self.client(cluster_name)
         node_name = plan_metadata.get("node") or settings.proxmox_default_node
         if not node_name:
             nodes = await client.nodes()
