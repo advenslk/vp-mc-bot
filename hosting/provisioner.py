@@ -89,6 +89,12 @@ class ProvisioningService:
 
     async def provision(self, client: ProxmoxClient, row) -> None:
         settings = self.settings
+        try:
+            plan_metadata = json.loads(row["metadata"] or "{}")
+        except (TypeError, ValueError):
+            plan_metadata = {}
+        cluster_name = str(plan_metadata.get("cluster") or settings.proxmox_default_node or "") or None
+        client = self.client(cluster_name) if client is not None else self.client(cluster_name)
         node_name = plan_metadata.get("node") or settings.proxmox_default_node
         if not node_name:
             nodes = await client.nodes()
