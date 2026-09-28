@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import discord
 from discord.ext import commands
 
 from core.components import simple_view
@@ -14,13 +15,44 @@ class AccountCog(commands.Cog):
     async def account_link(self, ctx):
         await self.bot.economy.ensure_user(ctx.author.id, str(ctx.author), ctx.author.display_name)
         code = await self.bot.accounts.create_link_code(ctx.author.id)
-        await ctx.author.send(
-            "## HelzerX Cloud Account Link Code\\n"
-            "Use this one-time code on the HelzerX Cloud website to link your Discord account:\\n\\n"
-            "**%s**\\n\\n"
-            "It expires in 10 minutes." % code
+
+        view = discord.ui.LayoutView(timeout=600)
+        container = discord.ui.Container()
+        container.add_item(discord.ui.TextDisplay("# HelzerX Cloud Account Link"))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(
+            "Your one-time account link code is ready.\n"
+            "Click **Show Link Code** to reveal it privately.\n\n"
+            "The code expires in **10 minutes**."
+        ))
+        row = discord.ui.ActionRow()
+        button = discord.ui.Button(
+            label="Show Link Code",
+            style=discord.ButtonStyle.secondary,
+            custom_id="account-link:show-code",
         )
-        await ctx.send(view=simple_view("# Account Link Code", "I sent a one-time link code to your Discord DMs. It expires in 10 minutes."))
+
+        async def show_code(interaction: discord.Interaction) -> None:
+            if interaction.user.id != ctx.author.id:
+                await interaction.response.send_message(
+                    "This link code belongs to another member.",
+                    ephemeral=True,
+                )
+                return
+            await interaction.response.send_message(
+                "## HelzerX Cloud Account Link Code\n"
+                "Use this one-time code on the HelzerX Cloud website:\n\n"
+                "**%s**\n\n"
+                "It expires in 10 minutes." % code,
+                ephemeral=True,
+            )
+
+        button.callback = show_code
+        row.add_item(button)
+        container.add_item(row)
+        view.add_item(container)
+
+        await ctx.send(view=view)
 
     @commands.command(name="account-status")
     @commands.guild_only()
