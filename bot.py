@@ -45,6 +45,7 @@ class HelzerXBot(commands.Bot):
         await self.load_extension("commands")
         await self.load_extension("hosting_commands")
         await self.load_extension("community_commands")
+        await self.load_extension("vps_commands")
         self.voice_rewards.start()
         self.provisioning_loop.start()
 
