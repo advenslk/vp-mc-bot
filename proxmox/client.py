@@ -47,8 +47,13 @@ class ProxmoxClient:
         timeout = kwargs.pop("timeout", httpx.Timeout(30.0, connect=10.0))
         url = self._url(path)
         try:
+            request_kwargs = {}
+            if method.upper() in {"GET", "DELETE"}:
+                request_kwargs["params"] = kwargs
+            else:
+                request_kwargs["data"] = kwargs
             async with httpx.AsyncClient(verify=self.config.verify_ssl, timeout=timeout) as client:
-                response = await client.request(method, url, headers=self.headers, data=kwargs)
+                response = await client.request(method, url, headers=self.headers, **request_kwargs)
         except httpx.ConnectTimeout as exc:
             raise ProxmoxError(
                 "Could not connect to Proxmox API within 10 seconds: %s. "
@@ -144,7 +149,10 @@ class ProxmoxClient:
             status = str((result or {}).get("status", "")).lower()
             if status == "stopped":
                 exitstatus = str((result or {}).get("exitstatus", "")).lower()
-                if exitstatus not in {"ok", ""}:
+                # Proxmox may finish successfully with non-fatal warnings,
+                # e.g. "WARNINGS: 1". Only explicit failure statuses are errors.
+                normalized = exitstatus.strip()
+                if normalized and normalized not in {"ok", "null"} and not normalized.startswith("warnings:"):
                     raise ProxmoxError("Proxmox task failed: %s" % str(result)[:1000])
                 return result
             if asyncio.get_running_loop().time() >= deadline:
