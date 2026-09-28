@@ -77,10 +77,20 @@ class ProvisioningService:
         node_name = settings.proxmox_default_node
         if not node_name:
             nodes = await client.nodes()
-            available = [n for n in nodes if n.get("status") == "online"]
+            ram_need = int(row["ram_mb"]) * 1024 * 1024
+            cpu_need = int(row["cpu_units"])
+            available = []
+            for n in nodes:
+                if n.get("status") != "online":
+                    continue
+                free_mem = int(n.get("maxmem", 0)) - int(n.get("mem", 0))
+                free_cpu = float(n.get("maxcpu", 0)) - float(n.get("cpu", 0))
+                if free_mem >= ram_need and free_cpu >= cpu_need:
+                    available.append((free_mem, free_cpu, n["node"]))
             if not available:
-                raise ProxmoxError("No online Proxmox nodes are available.")
-            node_name = available[0]["node"]
+                raise ProxmoxError("No online Proxmox node has enough reported capacity for this plan.")
+            available.sort(reverse=True)
+            node_name = available[0][2]
 
         vmid = await client.next_vmid()
         hostname = "hx-%s-%s" % (str(row["plan_key"]).lower(), secrets.token_hex(3))
