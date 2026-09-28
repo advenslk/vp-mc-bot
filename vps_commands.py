@@ -93,15 +93,20 @@ class VPSCog(commands.Cog):
             if not ptero:
                 await ctx.send(view=simple_view("# VPS Control Unavailable", "Pterodactyl control is not configured.", discord.Colour.orange()))
                 return
-            mapping = {"start": "unsuspend", "stop": "suspend", "shutdown": "suspend", "reboot": "unsuspend"}
+            mapping = {"start": "start", "stop": "stop", "shutdown": "stop", "reboot": "restart"}
             if action not in mapping:
                 await ctx.send(view=simple_view("# Unsupported Action", "That action is not available for Minecraft resources.", discord.Colour.orange()))
                 return
-            if mapping[action] == "unsuspend":
-                await ptero.unsuspend(str(row["provider_id"]))
-            else:
-                await ptero.suspend(str(row["provider_id"]))
+            await ptero.power(str(row["provider_id"]), mapping[action])
             state = "running" if action in {"start","reboot"} else "stopped"
+            await self.bot.db.execute(
+                "UPDATE vps_servers SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (state, server_id),
+            )
+            await self.bot.db.execute(
+                "INSERT INTO server_events(server_id,event_type,details) VALUES(?,?,?)",
+                (server_id, "power", json.dumps({"signal": mapping[action]})),
+            )
         else:
             client = self.client()
             node = self.bot.settings.proxmox_default_node
