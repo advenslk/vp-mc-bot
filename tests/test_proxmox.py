@@ -85,3 +85,28 @@ def test_lxc_clone_acl_failure_is_configuration_error():
             raise AssertionError("Expected ProxmoxConfigurationError")
 
     asyncio.run(run())
+
+
+def test_lxc_clone_full_clone_sends_storage():
+    client = ProxmoxClient(
+        ProxmoxConfig(
+            base_url="https://pve.example:8006",
+            token_id="user@pam!bot",
+            token_secret="secret",
+        )
+    )
+    calls = []
+
+    async def fake_request(method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        return {"data": "UPID:test"}
+
+    client.request = fake_request
+
+    async def run():
+        result = await client.clone_container("pve01", 9000, 101, "hx-test", "local-lvm")
+        assert result["data"] == "UPID:test"
+        assert calls[0][2]["full"] == 1
+        assert calls[0][2]["storage"] == "local-lvm"
+
+    asyncio.run(run())
