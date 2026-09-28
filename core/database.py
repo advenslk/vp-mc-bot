@@ -41,8 +41,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_transactions_user_created
-ON transactions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_transactions_user_created ON transactions(user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS daily_claims (
     user_id INTEGER PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
@@ -67,8 +66,13 @@ CREATE TABLE IF NOT EXISTS invites (
     PRIMARY KEY(guild_id, invitee_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_invites_inviter
-ON invites(guild_id, inviter_id);
+CREATE INDEX IF NOT EXISTS idx_invites_inviter ON invites(guild_id, inviter_id);
+
+CREATE TABLE IF NOT EXISTS invite_milestones (
+    milestone INTEGER PRIMARY KEY,
+    reward INTEGER NOT NULL CHECK(reward >= 0),
+    enabled INTEGER NOT NULL DEFAULT 1
+);
 
 CREATE TABLE IF NOT EXISTS reward_rules (
     reward_key TEXT PRIMARY KEY,
@@ -133,8 +137,7 @@ CREATE TABLE IF NOT EXISTS plans (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_plans_kind_enabled
-ON plans(kind, enabled);
+CREATE INDEX IF NOT EXISTS idx_plans_kind_enabled ON plans(kind, enabled);
 
 CREATE TABLE IF NOT EXISTS redemptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
