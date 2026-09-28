@@ -219,8 +219,8 @@ class ProvisioningService:
                 hostname,
                 settings.proxmox_storage,
                 full=True,
-                password=vps_password,
             )
+            await client.set_container_password(node_name, vmid, vps_password)
             target_storage_gb = int(row["storage_gb"] or 0)
             if target_storage_gb > 0:
                 rootfs = await client.container_config(node_name, vmid)
