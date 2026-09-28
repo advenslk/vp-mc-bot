@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 
 import discord
 from discord.ext import commands
@@ -173,6 +174,69 @@ class VPSCog(commands.Cog):
             await ctx.send(view=simple_view("# VPS Not Found", "That VPS no longer exists.", discord.Colour.orange()))
 
 
+    @commands.command(name="vps-password", aliases=("vps-credentials", "vps-login"))
+    @commands.guild_only()
+    async def password(self, ctx, server_id: int):
+        row = await self.own_server(ctx, server_id)
+        if not row:
+            return
+        try:
+            metadata = json.loads(row["metadata"] or "{}")
+        except (TypeError, ValueError):
+            metadata = {}
+        if metadata.get("provider") != "lxc":
+            await ctx.send(view=simple_view("# Password Reset Unavailable", "Password reset is currently supported for LXC VPS resources."))
+            return
+        if not row["vmid"]:
+            await ctx.send(view=simple_view("# VPS Not Ready", "This VPS is still provisioning."))
+            return
+
+        view = discord.ui.LayoutView(timeout=300)
+        container = discord.ui.Container()
+        container.add_item(discord.ui.TextDisplay("# VPS Credentials"))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(
+            "For security, the VPS password is generated only when you request it.\n"
+            "Click **Generate New Password** to receive the credentials privately."
+        ))
+        action_row = discord.ui.ActionRow()
+        button = discord.ui.Button(label="Generate New Password", style=discord.ButtonStyle.secondary, custom_id="vps:generate-password")
+
+        async def generate(interaction: discord.Interaction) -> None:
+            if interaction.user.id != ctx.author.id:
+                await interaction.response.send_message("These credentials belong to another member.", ephemeral=True)
+                return
+            cluster = metadata.get("cluster")
+            node = metadata.get("node") or self.bot.settings.proxmox_default_node
+            client = self.client(cluster)
+            if not client or not node:
+                await interaction.response.send_message("Proxmox control is not configured for this VPS.", ephemeral=True)
+                return
+            new_password = secrets.token_urlsafe(15)
+            try:
+                await client.set_container_config(node, int(row["vmid"]), {"password": new_password})
+                await self.bot.db.execute(
+                    "UPDATE vps_servers SET username=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                    ("root", server_id),
+                )
+            except ProxmoxError as exc:
+                await interaction.response.send_message("Password reset failed: %s" % str(exc), ephemeral=True)
+                return
+            panel = self.bot.settings.proxmox_public_url or self.bot.settings.proxmox_api_url or "Configured Proxmox endpoint"
+            await interaction.response.send_message(
+                "## HelzerX Cloud — VPS Credentials\n"
+                "**Panel:** %s\n**Node:** `%s`\n**VMID:** `%s`\n\n"
+                "**Username:** `root`\n**Password:** `%s`\n**Hostname:** `%s`\n\n"
+                "Change the password after your first login."
+                % (panel, node, row["vmid"], new_password, row["hostname"]),
+                ephemeral=True,
+            )
+
+        button.callback = generate
+        action_row.add_item(button)
+        container.add_item(action_row)
+        view.add_item(container)
+        await ctx.send(view=view)
 
 async def setup(bot) -> None:
     await bot.add_cog(VPSCog(bot))
