@@ -106,10 +106,11 @@ class HelpView(discord.ui.LayoutView):
     def _render(self, category: str) -> None:
         self.clear_items()
         title, body = self._content(category)
-        self.add_item(discord.ui.TextDisplay(title))
-        self.add_item(discord.ui.Separator())
-        self.add_item(discord.ui.TextDisplay(body))
-        self.add_item(discord.ui.Separator())
+        container = discord.ui.Container()
+        container.add_item(discord.ui.TextDisplay(title))
+        container.add_item(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(body))
+        container.add_item(discord.ui.Separator())
 
         row = discord.ui.ActionRow()
         select = discord.ui.Select(
@@ -134,7 +135,8 @@ class HelpView(discord.ui.LayoutView):
 
         select.callback = on_select
         row.add_item(select)
-        self.add_item(row)
+        container.add_item(row)
+        self.add_item(container)
 
 
 class CommunityCog(commands.Cog):
