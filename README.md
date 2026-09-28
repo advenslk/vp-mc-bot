@@ -116,16 +116,31 @@ PROXMOX_BRIDGE=vmbr0
 PROXMOX_START=true
 ```
 
-The LXC template must exist and be cloneable. The API token needs `VM.Clone` on `/vms/9000`, VM management privileges on `/vms`, and `Datastore.AllocateSpace` on the target storage. The worker treats Proxmox HTTP 403 permission failures as provider-configuration states, keeps the redemption queued, and retries automatically instead of refunding a valid customer redemption.
+The LXC template must exist and be cloneable. The API token needs `VM.Clone` on `/vms/9000`, VM management privileges on `/vms`, `Datastore.AllocateSpace` on the target storage, and `SDN.Use` for the bridge/VNet used by the template. Proxmox 8+ checks `SDN.Use` when a guest NIC uses a local bridge, so a token can otherwise reach the API successfully and still receive a 403 during clone.
 
 A practical scoped setup is:
 
 ```bash
+pveum acl modify / -user 'helzerx-bot@pam' -role PVEAuditor
+pveum acl modify /vms -user 'helzerx-bot@pam' -role PVEVMAdmin
+pveum acl modify /storage -user 'helzerx-bot@pam' -role PVEDatastoreUser
+pveum acl modify /sdn/zones/localnetwork -user 'helzerx-bot@pam' -role PVESDNUser
+
 pveum acl modify / -token 'helzerx-bot@pam!helzerx' -role PVEAuditor
 pveum acl modify /vms -token 'helzerx-bot@pam!helzerx' -role PVEVMAdmin
 pveum acl modify /storage -token 'helzerx-bot@pam!helzerx' -role PVEDatastoreUser
+pveum acl modify /sdn/zones/localnetwork -token 'helzerx-bot@pam!helzerx' -role PVESDNUser
+
 pveum user token permissions helzerx-bot@pam helzerx
 ```
+
+Or, from the Proxmox host, run the repository helper:
+
+```bash
+bash scripts/proxmox-vps-acl.sh
+```
+
+The helper only changes ACLs; it does not create, rotate, or expose the API token secret.
 
 If the token uses privilege separation, the token ACLs above are intentional. The Proxmox token must still be constrained by the backing user permissions. The bot does not use a Proxmox root password.
 
