@@ -30,32 +30,6 @@ class CommunityCog(commands.Cog):
         )
         await ctx.send(view=simple_view("# HelzerX Cloud Command Center", body))
 
-    @commands.command(name="quests")
-    async def quests(self, ctx: commands.Context) -> None:
-        rows = await self.bot.db.fetchall(
-            "SELECT name,description,target,reward,period FROM quests WHERE enabled=1 ORDER BY id ASC"
-        )
-        if not rows:
-            body = "No active quests are configured yet."
-        else:
-            body = "\n".join(
-                "• **%s** — %s | %d target | +%d HZL | %s"
-                % (r["name"], r["description"], r["target"], r["reward"], r["period"])
-                for r in rows
-            )
-        await ctx.send(view=simple_view("# HZL Quests", body))
-
-    @commands.command(name="achievements", aliases=("achievements-list",))
-    async def achievements(self, ctx: commands.Context) -> None:
-        rows = await self.bot.db.fetchall(
-            "SELECT name,description,reward FROM achievements ORDER BY achievement_key"
-        )
-        body = "\n".join(
-            "• **%s** — %s | +%d HZL" % (r["name"], r["description"], r["reward"])
-            for r in rows
-        ) or "No achievements configured."
-        await ctx.send(view=simple_view("# HZL Achievements", body))
-
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(CommunityCog(bot))
