@@ -79,12 +79,10 @@ The repository is designed to grow into:
 - VPS/Minecraft lifecycle management
 - Proxmox node selection and capacity checks
 - Automatic VM provisioning
-- Resource monitoring
-- Password reset and secure credential delivery
-- Admin dashboard
-- Web API
+- Node health monitoring
+- Web API and account linking
 - Notifications and expiry automation
-- Backups, metrics, health checks and operational audit tooling
+- Operational audit tooling
 
 
 ## Current production foundation
@@ -157,6 +155,9 @@ The bot creates/reuses a non-admin Pterodactyl user, creates the server with the
 - `.admin-plan-cost <plan> <hzl>`
 - `.admin-plan-toggle <plan> <0|1>`
 - `.admin-plan-provider <plan> <qemu|lxc|pterodactyl>`
+- `.admin-plan-target <plan> <cluster> [node]`
+- `.admin-plan-set <plan> <usd> <hzl> <days>`
+- `.admin-node-health`
 - `.admin-node-add <name> <node> <location> <api_url>`
 - `.admin-node-toggle <name> <0|1>`
 - `.admin-nodes`
@@ -191,3 +192,18 @@ Endpoints include account registration/verification/login/logout, authenticated 
 ## Account linking
 
 Users can run `.account-link` in Discord. The bot sends a short-lived one-time code by DM. The web registration endpoint requires that code, preventing arbitrary users from claiming another Discord user's hosting account.
+
+
+### Multi-cluster Proxmox
+
+Set PROXMOX_CLUSTERS_JSON when more than one Proxmox API endpoint is used. Each JSON key is a cluster name.
+
+Example shape:
+PROXMOX_DEFAULT_NODE=singapore
+PROXMOX_CLUSTERS_JSON={"singapore":{"api_url":"https://pve-sg.example:8006","token_id":"user@pam!bot","token_secret":"SECRET","verify_ssl":false},"germany":{"api_url":"https://pve-de.example:8006","token_id":"user@pam!bot","token_secret":"SECRET","verify_ssl":false}}
+
+Owner targeting commands:
+.admin-plan-target HXC-V04 singapore
+.admin-plan-target HXC-V08 germany pve01
+
+Keep API secrets outside Git and replace all example values with real credentials.
