@@ -24,7 +24,8 @@ class ProvisioningService:
 
     def client(self) -> ProxmoxClient | None:
         s = self.settings
-        if not all((s.proxmox_api_url, s.proxmox_token_id, s.proxmox_token_secret, s.proxmox_template_vmid)):
+        if not all((s.proxmox_api_url, s.proxmox_token_id, s.proxmox_token_secret)):
+
             return None
         return ProxmoxClient(ProxmoxConfig(
             base_url=s.proxmox_api_url,
@@ -50,7 +51,7 @@ class ProvisioningService:
         if client is None:
             return
         row = await self.db.fetchone(
-            "SELECT j.*,r.user_id,r.cost,p.plan_key,p.name,p.ram_mb,p.cpu_units,p.storage_gb,p.duration_days "
+            "SELECT j.*,r.user_id,r.cost,p.plan_key,p.name,p.ram_mb,p.cpu_units,p.storage_gb,p.duration_days,p.metadata "
             "FROM provisioning_jobs j JOIN redemptions r ON r.id=j.redemption_id "
             "JOIN plans p ON p.id=r.plan_id WHERE j.status='queued' ORDER BY j.id LIMIT 1"
         )
@@ -70,7 +71,11 @@ class ProvisioningService:
                 "UPDATE provisioning_jobs SET status='failed',last_error=?,finished_at=CURRENT_TIMESTAMP WHERE id=?",
                 (str(exc)[:1000], job_id),
             )
-            await self.bot.hosting.fail_and_refund(int(row["redemption_id"]), str(exc)[:500])
+            attempts = int(row["attempts"]) + 1
+            if attempts >= 3:
+                await self.bot.hosting.fail_and_refund(int(row["redemption_id"]), str(exc)[:500])
+            else:
+                await self.db.execute("UPDATE provisioning_jobs SET status='queued' WHERE id=?", (job_id,))
 
     async def provision(self, client: ProxmoxClient, row) -> None:
         settings = self.settings
@@ -78,13 +83,15 @@ class ProvisioningService:
         if not node_name:
             nodes = await client.nodes()
             ram_need = int(row["ram_mb"]) * 1024 * 1024
-            cpu_need = int(row["cpu_units"])
+            cpu_need = float(row["cpu_units"])
             available = []
             for n in nodes:
                 if n.get("status") != "online":
                     continue
                 free_mem = int(n.get("maxmem", 0)) - int(n.get("mem", 0))
-                free_cpu = float(n.get("maxcpu", 0)) - float(n.get("cpu", 0))
+                max_cpu = float(n.get("maxcpu", 0))
+                used_ratio = float(n.get("cpu", 0))
+                free_cpu = max_cpu * max(0.0, 1.0 - used_ratio)
                 if free_mem >= ram_need and free_cpu >= cpu_need:
                     available.append((free_mem, free_cpu, n["node"]))
             if not available:
