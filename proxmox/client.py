@@ -96,17 +96,31 @@ class ProxmoxClient:
             params["storage"] = storage
         return await self.request("POST", "nodes/%s/qemu/%s/clone" % (node, template_vmid), **params)
 
-    async def clone_container(self, node: str, template_vmid: int, newid: int, hostname: str, storage: str | None = None) -> Any:
-        """Clone an LXC template.
+    async def clone_container(
+        self,
+        node: str,
+        template_vmid: int,
+        newid: int,
+        hostname: str,
+        storage: str | None = None,
+        full: bool = True,
+    ) -> Any:
+        """Clone an LXC template as an independent full clone.
 
-        Proxmox may require VM.Clone on the source template path (/vms/<vmid>).
-        The API client deliberately does not try to bypass that permission; the
-        configured API token must be granted the required ACL by the operator.
+        Proxmox rejects the storage parameter for linked LXC clones.
+        Hosted VPSes need independent root filesystems because the worker
+        resizes them to the purchased plan size, so full clones are used.
         """
-        params = {"newid": newid, "hostname": hostname}
-        if storage:
+        params = {
+            "newid": newid,
+            "hostname": hostname,
+            "full": 1 if full else 0,
+        }
+        if full and storage:
             params["storage"] = storage
-        return await self.request("POST", "nodes/%s/lxc/%s/clone" % (node, template_vmid), **params)
+        return await self.request(
+            "POST", "nodes/%s/lxc/%s/clone" % (node, template_vmid), **params
+        )
 
     async def set_container_config(self, node: str, vmid: int, config: dict[str, Any]) -> Any:
         return await self.request("PUT", "nodes/%s/lxc/%s/config" % (node, vmid), **config)
