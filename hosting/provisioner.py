@@ -6,6 +6,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from proxmox.client import ProxmoxClient, ProxmoxConfig, ProxmoxError
+from minecraft.client import PterodactylClient, PterodactylConfig, PterodactylError
 
 
 class ProvisioningService:
@@ -107,6 +108,10 @@ class ProvisioningService:
             metadata = {}
         provider = str(metadata.get("provider", "qemu")).lower()
 
+        if provider == "pterodactyl":
+            await self.provision_minecraft(row, hostname)
+            return
+
         if provider == "lxc":
             if not settings.proxmox_template_ctid:
                 raise ProxmoxError("PROXMOX_TEMPLATE_CTID is required for LXC plans.")
@@ -186,6 +191,76 @@ class ProvisioningService:
                 )
             except Exception:
                 self.logger.warning("Could not DM provisioning result to user %s", row["user_id"])
+
+    async def provision_minecraft(self, row, hostname: str) -> None:
+        s = self.settings
+        if not all((s.pterodactyl_url, s.pterodactyl_api_key, s.pterodactyl_nest_id,
+                    s.pterodactyl_egg_id, s.pterodactyl_location_id)):
+            raise PterodactylError("Pterodactyl provisioning is not fully configured.")
+        client = PterodactylClient(PterodactylConfig(
+            base_url=s.pterodactyl_url,
+            api_key=s.pterodactyl_api_key,
+            verify_ssl=s.proxmox_verify_ssl,
+        ))
+        account = await self.db.fetchone("SELECT email FROM accounts WHERE user_id=? AND email_verified=1", (row["user_id"],))
+        email = account["email"] if account else "discord-%s@helzerx.local" % row["user_id"]
+        user = await client.create_user(
+            "hx%s" % row["user_id"],
+            email,
+            "HelzerX",
+            "User",
+        )
+        ptero_user_id = int(user["object"] == "user" and user["attributes"]["id"] or user["id"])
+        result = await client.create_server(
+            hostname,
+            ptero_user_id,
+            int(s.pterodactyl_nest_id),
+            int(s.pterodactyl_egg_id),
+            s.pterodactyl_docker_image,
+            s.pterodactyl_startup,
+            int(row["ram_mb"]),
+            int(row["storage_gb"]) * 1024,
+            int(row["cpu_units"]),
+            int(s.pterodactyl_location_id),
+            {"SERVER_JARFILE": "server.jar"},
+        )
+        attrs = result.get("attributes", result)
+        provider_id = str(attrs.get("id") or attrs.get("identifier") or "")
+        async with self.db.transaction() as db:
+            plan_id = await self.plan_id(db, str(row["plan_key"]))
+            cur = await db.execute(
+                """INSERT INTO vps_servers
+                   (user_id,plan_id,vmid,hostname,kind,status,os,expires_at,provider_id,metadata)
+                   VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    int(row["user_id"]), plan_id, None, hostname, "minecraft", "active",
+                    "pterodactyl",
+                    (datetime.now(timezone.utc)+timedelta(days=int(row["duration_days"]))).isoformat(),
+                    provider_id,
+                    json.dumps({"provider":"pterodactyl","panel_url":s.pterodactyl_url}, separators=(",", ":")),
+                ),
+            )
+            await db.execute(
+                "UPDATE provisioning_jobs SET status='completed',server_id=?,finished_at=CURRENT_TIMESTAMP WHERE id=?",
+                (cur.lastrowid, int(row["id"])),
+            )
+            await db.execute(
+                "UPDATE redemptions SET status='completed',provider_resource_id=?,completed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'",
+                (provider_id, int(row["redemption_id"])),
+            )
+        user_obj = self.bot.get_user(int(row["user_id"]))
+        if user_obj:
+            try:
+                await user_obj.send(
+                    "## HelzerX Cloud — Minecraft Server Provisioned\\n"
+                    "Your **%s** server has been created.\\n\\n"
+                    "• Plan: **%s**\\n• Memory: **%s MB**\\n• Storage: **%s GB**\\n"
+                    "• CPU: **%s%%**\\n• Server ID: **%s**"
+                    % (hostname,row["plan_key"],row["ram_mb"],row["storage_gb"],row["cpu_units"],provider_id)
+                )
+            except Exception:
+                self.logger.warning("Could not DM Minecraft provisioning result to user %s", row["user_id"])
+
 
     async def plan_id(self, db, plan_key: str) -> int:
         row = await (await db.execute("SELECT id FROM plans WHERE plan_key=?", (plan_key,))).fetchone()
