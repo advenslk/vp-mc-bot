@@ -221,7 +221,13 @@ def test_set_container_password_uses_dedicated_passwd_endpoint():
         calls.append((method, path, kwargs))
         return {"data": "UPID:test"}
 
+    async def fake_wait(node, upid, *args, **kwargs):
+        assert node == "pve01"
+        assert upid == "UPID:test"
+        return {"status": "stopped", "exitstatus": "OK"}
+
     client.request = fake_request
+    client.wait_for_task = fake_wait
     result = asyncio.run(
         client.set_container_password("pve01", 101, "Generated-Password-123!")
     )
