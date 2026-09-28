@@ -188,11 +188,11 @@ class ProxmoxClient:
             "DELETE", "nodes/%s/qemu/%s" % (node, vmid), purge=1 if purge else 0
         )
 
-    async def next_vmid(self) -> int:
-        """Return a free VMID without depending on /cluster/nextid."""
+    async def next_vmid(self, excluded: set[int] | None = None) -> int:
+        """Return a free VMID, excluding IDs reserved by provisioning jobs."""
         resources = await self.cluster_resources()
 
-        used: set[int] = set()
+        used: set[int] = set(excluded or set())
         for item in resources if isinstance(resources, list) else []:
             if not isinstance(item, dict) or item.get("type") not in {"qemu", "lxc"}:
                 continue
