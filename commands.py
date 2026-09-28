@@ -377,7 +377,23 @@ class AdminCog(commands.Cog):
             client = None
             if cluster_name in clusters:
                 client = client_from_settings(self.bot.settings, cluster_name)
-            elif row["token_id"] and row["token_secret"]:
+            else:
+                matched = next(
+                    (
+                        cfg for cfg in clusters.values()
+                        if str(cfg.get("api_url") or "").rstrip("/") == str(row["api_url"] or "").rstrip("/")
+                        or str(cfg.get("node_name") or cfg.get("node") or "") == str(row["node_name"] or "")
+                    ),
+                    None,
+                )
+                if matched and all(matched.get(k) for k in ("api_url", "token_id", "token_secret")):
+                    client = ProxmoxClient(ProxmoxConfig(
+                        base_url=str(matched["api_url"]),
+                        token_id=str(matched["token_id"]),
+                        token_secret=str(matched["token_secret"]),
+                        verify_ssl=bool(matched.get("verify_ssl", self.bot.settings.proxmox_verify_ssl)),
+                    ))
+            if client is None and row["token_id"] and row["token_secret"]:
                 client = ProxmoxClient(ProxmoxConfig(
                     base_url=row["api_url"],
                     token_id=row["token_id"],
