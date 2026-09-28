@@ -39,6 +39,7 @@ class HelzerXBot(commands.Bot):
         await self.db.initialize()
         await self.seed_defaults()
         await self.load_extension("commands")
+        await self.load_extension("hosting_commands")
         self.voice_rewards.start()
 
     async def seed_defaults(self) -> None:
