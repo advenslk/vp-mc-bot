@@ -354,7 +354,7 @@ class ProvisioningService:
                 (cur.lastrowid, int(row["id"])),
             )
             await db.execute(
-                "UPDATE redemptions SET status='completed',provider_resource_id=?,completed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'",
+                "UPDATE redemptions SET status='completed',provider_resource_id=?,completed_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('pending','provisioning')",
                 (provider_id, int(row["redemption_id"])),
             )
         user_obj = self.bot.get_user(int(row["user_id"]))
@@ -363,6 +363,13 @@ class ProvisioningService:
             str(row["plan_key"]),
             "Finalizing", 95,
             "Minecraft server is ready. Preparing the final notification.",
+        )
+        await self.progress(
+            int(row["id"]),
+            str(row["plan_key"]),
+            "Completed", 100,
+            "Minecraft server provisioning is complete.",
+            "completed",
         )
         if user_obj:
             try:
