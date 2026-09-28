@@ -94,23 +94,46 @@ class ProvisioningService:
 
         vmid = await client.next_vmid()
         hostname = "hx-%s-%s" % (str(row["plan_key"]).lower(), secrets.token_hex(3))
-        clone_params = {}
-        if settings.proxmox_storage:
-            clone_params["storage"] = settings.proxmox_storage
-        await client.clone_vm(node_name, int(settings.proxmox_template_vmid), vmid, hostname, True)
+        try:
+            metadata = json.loads(row["metadata"] or "{}")
+        except (TypeError, ValueError):
+            metadata = {}
+        provider = str(metadata.get("provider", "qemu")).lower()
 
-        config = {
-            "memory": int(row["ram_mb"]),
-            "cores": int(row["cpu_units"]),
-            "name": hostname,
-            "onboot": 1,
-            "agent": 1,
-        }
-        if settings.proxmox_storage:
-            config["scsihw"] = "virtio-scsi-pci"
-        if settings.proxmox_bridge:
-            config["net0"] = "virtio,bridge=%s" % settings.proxmox_bridge
-        await client.set_vm_config(node_name, vmid, config)
+        if provider == "lxc":
+            if not settings.proxmox_template_ctid:
+                raise ProxmoxError("PROXMOX_TEMPLATE_CTID is required for LXC plans.")
+            await client.clone_container(
+                node_name, int(settings.proxmox_template_ctid), vmid, hostname, settings.proxmox_storage
+            )
+            config = {
+                "memory": int(row["ram_mb"]),
+                "swap": max(256, int(row["ram_mb"]) // 2),
+                "hostname": hostname,
+                "onboot": 1,
+                "cores": int(row["cpu_units"]),
+            }
+            if settings.proxmox_bridge:
+                config["net0"] = "name=eth0,bridge=%s,ip=dhcp" % settings.proxmox_bridge
+            await client.set_container_config(node_name, vmid, config)
+            kind = "vps"
+        else:
+            if not settings.proxmox_template_vmid:
+                raise ProxmoxError("PROXMOX_TEMPLATE_VMID is required for QEMU plans.")
+            await client.clone_vm(
+                node_name, int(settings.proxmox_template_vmid), vmid, hostname, True, settings.proxmox_storage
+            )
+            config = {
+                "memory": int(row["ram_mb"]),
+                "cores": int(row["cpu_units"]),
+                "name": hostname,
+                "onboot": 1,
+                "agent": 1,
+            }
+            if settings.proxmox_bridge:
+                config["net0"] = "virtio,bridge=%s" % settings.proxmox_bridge
+            await client.set_vm_config(node_name, vmid, config)
+            kind = "vps"
 
         node_id = await self.db.fetchone(
             "SELECT id FROM proxmox_nodes WHERE node_name=? LIMIT 1", (node_name,)
@@ -122,7 +145,7 @@ class ProvisioningService:
                    VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     int(row["user_id"]), await self.plan_id(db, str(row["plan_key"])),
-                    int(node_id["id"]) if node_id else None, vmid, hostname, "vps",
+                    int(node_id["id"]) if node_id else None, vmid, hostname, kind,
                     "active", "template", (datetime.now(timezone.utc)+timedelta(days=int(row["duration_days"]))).isoformat(),
                     str(vmid), json.dumps({"node": node_name}, separators=(",", ":")),
                 ),
@@ -138,7 +161,10 @@ class ProvisioningService:
             )
 
         if settings.proxmox_start:
-            await client.vm_action(node_name, vmid, "start")
+            if provider == "lxc":
+                await client.container_action(node_name, vmid, "start")
+            else:
+                await client.vm_action(node_name, vmid, "start")
 
         user = self.bot.get_user(int(row["user_id"]))
         if user:
