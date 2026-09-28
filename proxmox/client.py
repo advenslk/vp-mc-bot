@@ -58,6 +58,27 @@ class ProxmoxClient:
     async def create_container(self, node: str, vmid: int, config: dict[str, Any]) -> Any:
         return await self.request("POST", "nodes/%s/lxc" % node, vmid=vmid, **config)
 
+    async def clone_vm(self, node: str, template_vmid: int, newid: int, name: str, full: bool = True) -> Any:
+        return await self.request(
+            "POST", "nodes/%s/qemu/%s/clone" % (node, template_vmid),
+            newid=newid, name=name, full=1 if full else 0,
+        )
+
+    async def set_vm_config(self, node: str, vmid: int, config: dict[str, Any]) -> Any:
+        return await self.request("PUT", "nodes/%s/qemu/%s/config" % (node, vmid), **config)
+
+    async def vm_status(self, node: str, vmid: int) -> Any:
+        return await self.request("GET", "nodes/%s/qemu/%s/status/current" % (node, vmid))
+
+    async def delete_vm(self, node: str, vmid: int, purge: bool = True) -> Any:
+        return await self.request(
+            "DELETE", "nodes/%s/qemu/%s" % (node, vmid), purge=1 if purge else 0
+        )
+
+    async def next_vmid(self) -> int:
+        value = await self.request("GET", "cluster/nextid")
+        return int(value)
+
     async def vm_action(self, node: str, vmid: int, action: str) -> Any:
         if action not in {"start", "stop", "shutdown", "reboot", "reset"}:
             raise ValueError("Unsupported VM action")
