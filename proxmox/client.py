@@ -10,6 +10,11 @@ class ProxmoxError(RuntimeError):
     pass
 
 
+class ProxmoxConfigurationError(ProxmoxError):
+    """A provider-side configuration/permission problem that needs operator action."""
+    pass
+
+
 @dataclass(frozen=True)
 class ProxmoxConfig:
     base_url: str
@@ -99,15 +104,25 @@ class ProxmoxClient:
         except ProxmoxError as exc:
             message = str(exc)
             if "VM.Clone" in message and "/vms/%s" % template_vmid in message:
-                raise ProxmoxError(
-                    "Proxmox API token lacks VM.Clone permission on /vms/%s. "
-                    "Grant VM.Clone on the LXC template (/vms/%s) and retry the existing queued job."
+                raise ProxmoxConfigurationError(
+                    "Proxmox API token lacks VM.Clone on /vms/%s. "
+                    "Run on the Proxmox host: "
+                    "pveum acl modify /vms/%s -user 'helzerx-bot@pam' -role PVEVMAdmin. "
+                    "Then the queued VPS job will retry automatically."
                     % (template_vmid, template_vmid)
                 ) from exc
             raise
 
     async def set_container_config(self, node: str, vmid: int, config: dict[str, Any]) -> Any:
         return await self.request("PUT", "nodes/%s/lxc/%s/config" % (node, vmid), **config)
+
+    async def container_config(self, node: str, vmid: int) -> Any:
+        return await self.request("GET", "nodes/%s/lxc/%s/config" % (node, vmid))
+
+    async def resize_container(self, node: str, vmid: int, disk: str, size: str) -> Any:
+        return await self.request(
+            "PUT", "nodes/%s/lxc/%s/resize" % (node, vmid), disk=disk, size=size
+        )
 
     async def container_status(self, node: str, vmid: int) -> Any:
         return await self.request("GET", "nodes/%s/lxc/%s/status/current" % (node, vmid))
