@@ -23,12 +23,13 @@ class HostingRedemptionCog(commands.Cog):
             await ctx.send(view=simple_view("# Redemption Unavailable", str(exc), discord.Colour.orange()))
             return
         await ctx.send(view=simple_view(
-            "# Redemption Reserved",
-            "Your request for **%s** has been reserved.\n"
+            "# Provisioning Started",
+            "Your **%s** VPS request has been accepted.\n"
             "Redemption ID: **%s**\n"
-            "Status: **%s**\n\n"
-            "A provisioning worker can now safely create the resource. If provisioning fails, the reservation is automatically refundable."
-            % (plan_key.upper(), result.redemption_id, result.status)
+            "Status: **provisioning**\n\n"
+            "Your Proxmox resource is being created. Once it is ready, HelzerX Cloud will send the **Proxmox panel link, VMID, VPS username and generated password** to your Discord DM.\n\n"
+            "If provisioning fails, your HZL is automatically refunded."
+            % (plan_key.upper(), result.redemption_id)
         ))
 
     @commands.command(name="my-redemptions", aliases=("redemptions",))
