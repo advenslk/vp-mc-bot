@@ -10,6 +10,7 @@ from discord.ext import commands, tasks
 
 from config.settings import load_settings
 from core.database import Database
+from account.service import AccountService
 from economy.service import EconomyService
 from hosting.service import HostingService
 from hosting.provisioner import ProvisioningService
@@ -34,6 +35,7 @@ class HelzerXBot(commands.Bot):
         self.db = Database(self.settings.database_path)
         self.economy = EconomyService(self.db)
         self.hosting = HostingService(self.db, self.economy)
+        self.accounts = AccountService(self.db)
         self.provisioner = ProvisioningService(self)
         self.lifecycle = LifecycleService(self)
         self.invite_cache: dict[int, dict[str, int]] = {}
@@ -48,6 +50,7 @@ class HelzerXBot(commands.Bot):
         await self.load_extension("hosting_commands")
         await self.load_extension("community_commands")
         await self.load_extension("vps_commands")
+        await self.load_extension("account_commands")
         self.voice_rewards.start()
         self.provisioning_loop.change_interval(seconds=self.settings.provisioning_interval)
         self.provisioning_loop.start()
