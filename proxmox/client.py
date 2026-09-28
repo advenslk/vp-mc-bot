@@ -122,6 +122,7 @@ class ProxmoxClient:
         hostname: str,
         storage: str | None = None,
         full: bool = True,
+        password: str | None = None,
     ) -> Any:
         """Clone an LXC template as an independent full clone.
 
@@ -136,6 +137,8 @@ class ProxmoxClient:
         }
         if full and storage:
             params["storage"] = storage
+        if password:
+            params["password"] = password
         return await self.request(
             "POST", "nodes/%s/lxc/%s/clone" % (node, template_vmid), **params
         )
@@ -159,9 +162,36 @@ class ProxmoxClient:
                 raise ProxmoxError("Proxmox task did not finish within %s seconds: %s" % (timeout_seconds, upid))
             await asyncio.sleep(poll_seconds)
 
-    async def clone_container_and_wait(self, node: str, template_vmid: int, newid: int, hostname: str, storage: str | None = None, full: bool = True) -> Any:
-        """Start an LXC clone and wait until the clone lock is released."""
-        result = await self.clone_container(node, template_vmid, newid, hostname, storage, full)
+    async def clone_container_and_wait(
+        self,
+        node: str,
+        template_vmid: int,
+        newid: int,
+        hostname: str,
+        storage: str | None = None,
+        full: bool = True,
+        password: str | None = None,
+    ) -> Any:
+        """Start an LXC clone and wait until the clone task has finished."""
+        result = await self.clone_container(
+            node, template_vmid, newid, hostname, storage, full, password
+        )
+        upid = result.get("data") if isinstance(result, dict) else result
+        if upid:
+            await self.wait_for_task(node, str(upid))
+        return result
+
+    async def clone_vm_and_wait(
+        self,
+        node: str,
+        template_vmid: int,
+        newid: int,
+        name: str,
+        full: bool = True,
+        storage: str | None = None,
+    ) -> Any:
+        """Start a QEMU clone and wait until the clone task has finished."""
+        result = await self.clone_vm(node, template_vmid, newid, name, full, storage)
         upid = result.get("data") if isinstance(result, dict) else result
         if upid:
             await self.wait_for_task(node, str(upid))
