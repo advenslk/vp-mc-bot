@@ -1,9 +1,9 @@
 services:
   bot:
     build: .
+    user: root
     restart: unless-stopped
-    # Python asyncio/Discord requires socketpair(); the host's AppArmor
-    # profile can otherwise deny the syscall inside the container.
+    # The host's Docker AppArmor profile can deny asyncio's socketpair syscall.
     security_opt:
       - apparmor=unconfined
     env_file:
@@ -14,6 +14,7 @@ services:
 
   api:
     build: .
+    user: root
     command: uvicorn web.api:app --host 0.0.0.0 --port 8000
     restart: unless-stopped
     security_opt:
