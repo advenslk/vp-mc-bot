@@ -1,0 +1,179 @@
+from __future__ import annotations
+
+import discord
+from discord.ext import commands
+
+from config.emoji import e
+from core.components import plans_view, simple_view, wallet_view
+from economy.service import EconomyError, EconomyService
+
+
+class EconomyCog(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+        self.economy: EconomyService = bot.economy
+
+    async def _ensure(self, ctx: commands.Context) -> None:
+        user = ctx.author
+        await self.economy.ensure_user(user.id, str(user), user.display_name)
+
+    @commands.command(name="profile", aliases=("wallet", "me"))
+    @commands.guild_only()
+    async def profile(self, ctx: commands.Context) -> None:
+        await self._ensure(ctx)
+        balance = await self.economy.balance(ctx.author.id)
+        invites = await self.economy.invite_count(ctx.guild.id, ctx.author.id)
+        recent = await self.economy.recent_summary(ctx.author.id)
+        await ctx.send(view=wallet_view(ctx.author.display_name, balance, invites, recent))
+
+    @commands.command(name="balance", aliases=("bal", "hzl"))
+    async def balance(self, ctx: commands.Context) -> None:
+        await self._ensure(ctx)
+        value = await self.economy.balance(ctx.author.id)
+        await ctx.send(view=simple_view(
+            "# %s HZL Balance" % e("currency", "◈"),
+            "Your current balance is **%s HZL**." % format(value, ",")
+        ))
+
+    @commands.command(name="daily")
+    @commands.guild_only()
+    async def daily(self, ctx: commands.Context) -> None:
+        await self._ensure(ctx)
+        ok, value = await self.economy.claim_daily(ctx.author.id, self.bot.settings.daily_reward)
+        if not ok:
+            hours, rem = divmod(value, 3600)
+            minutes, _ = divmod(rem, 60)
+            await ctx.send(view=simple_view(
+                "# Daily Reward",
+                "You have already claimed your daily reward. Try again in **%dh %dm**." % (hours, minutes),
+                discord.Colour.orange()
+            ))
+            return
+        await ctx.send(view=simple_view(
+            "# %s Daily Reward Claimed" % e("gift", "◆"),
+            "You received **+%s HZL**. Your balance is now **%s HZL**."
+            % (format(value, ","), format(await self.economy.balance(ctx.author.id), ","))
+        ))
+
+    @commands.command(name="invites")
+    @commands.guild_only()
+    async def invites(self, ctx: commands.Context) -> None:
+        await self._ensure(ctx)
+        count = await self.economy.invite_count(ctx.guild.id, ctx.author.id)
+        await ctx.send(view=simple_view(
+            "# %s Verified Invites" % e("invites", "◆"),
+            "You have **%d verified invites**.\n\nInvite rewards are issued only for valid, non-self, non-bot members."
+            % count
+        ))
+
+    @commands.command(name="transactions", aliases=("tx", "history"))
+    async def transactions(self, ctx: commands.Context) -> None:
+        await self._ensure(ctx)
+        rows = await self.economy.transactions(ctx.author.id, 15)
+        if not rows:
+            body = "No transactions yet."
+        else:
+            body = "\n".join(
+                "%s%s HZL · %s · %s" % (
+                    "+" if row["amount"] >= 0 else "",
+                    row["amount"], row["source"], row["transaction_type"]
+                )
+                for row in rows
+            )
+        await ctx.send(view=simple_view("# HZL Transaction History", body))
+
+    @commands.command(name="leaderboard", aliases=("lb", "top"))
+    async def leaderboard(self, ctx: commands.Context) -> None:
+        rows = await self.economy.leaderboard(10)
+        body = "No economy data yet." if not rows else "\n".join(
+            "%d. **%s** — %s HZL" % (i, row["display_name"], format(row["balance"], ","))
+            for i, row in enumerate(rows, 1)
+        )
+        await ctx.send(view=simple_view("# HZL Leaderboard", body))
+
+
+class HostingCog(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+
+    async def _plans(self, ctx: commands.Context, kind: str) -> None:
+        rows = await self.bot.db.fetchall(
+            """SELECT id,plan_key,name,ram_mb,cpu_units,storage_gb,price_usd,hzl_cost,location
+               FROM plans WHERE kind=? AND enabled=1 ORDER BY ram_mb ASC""",
+            (kind,),
+        )
+        await ctx.send(view=plans_view(kind, rows))
+
+    @commands.command(name="mc-plans", aliases=("minecraft-plans", "mcplans"))
+    async def minecraft_plans(self, ctx: commands.Context) -> None:
+        await self._plans(ctx, "minecraft")
+
+    @commands.command(name="vps-plans", aliases=("vpsplans",))
+    async def vps_plans(self, ctx: commands.Context) -> None:
+        await self._plans(ctx, "vps")
+
+    @commands.command(name="rewards", aliases=("reward",))
+    async def rewards(self, ctx: commands.Context) -> None:
+        body = (
+            "### HZL Earning\n"
+            "• Daily check-in — configurable reward\n"
+            "• Eligible community activity — cooldown protected\n"
+            "• Verified Discord invites — anti-abuse checks\n"
+            "• Quests and achievements — database driven\n\n"
+            "HZL is an internal HelzerX reward currency. It has no cash value and cannot be withdrawn."
+        )
+        await ctx.send(view=simple_view("# %s HelzerX Rewards" % e("gift", "◆"), body))
+
+
+class AdminCog(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+
+    async def _owner(self, ctx: commands.Context) -> bool:
+        return ctx.author.id in self.bot.settings.owner_ids or await self.bot.is_owner(ctx.author)
+
+    @commands.command(name="admin-add")
+    async def admin_add(self, ctx: commands.Context, member: discord.Member, amount: int, *, reason: str = "manual adjustment") -> None:
+        if not await self._owner(ctx):
+            await ctx.send(view=simple_view("# Permission Denied", "This command is restricted to bot owners.", discord.Colour.red()))
+            return
+        if amount <= 0:
+            await ctx.send(view=simple_view("# Invalid Amount", "Amount must be greater than zero.", discord.Colour.orange()))
+            return
+        await self.bot.economy.ensure_user(member.id, str(member), member.display_name)
+        before, after = await self.bot.economy.change_balance(member.id, amount, "admin_credit", "admin", str(ctx.author.id), {"reason": reason})
+        await self.bot.db.execute("INSERT INTO audit_logs(actor_id,action,target_id,details) VALUES(?,?,?,?)",
+                                   (ctx.author.id, "economy.credit", str(member.id), reason))
+        await ctx.send(view=simple_view(
+            "# HZL Adjustment",
+            "**%s** received **+%s HZL**.\nBalance: %s → %s HZL\nReason: %s"
+            % (member.display_name, format(amount, ","), format(before, ","), format(after, ","), reason)
+        ))
+
+    @commands.command(name="admin-remove")
+    async def admin_remove(self, ctx: commands.Context, member: discord.Member, amount: int, *, reason: str = "manual adjustment") -> None:
+        if not await self._owner(ctx):
+            await ctx.send(view=simple_view("# Permission Denied", "This command is restricted to bot owners.", discord.Colour.red()))
+            return
+        if amount <= 0:
+            await ctx.send(view=simple_view("# Invalid Amount", "Amount must be greater than zero.", discord.Colour.orange()))
+            return
+        await self.bot.economy.ensure_user(member.id, str(member), member.display_name)
+        try:
+            before, after = await self.bot.economy.change_balance(member.id, -amount, "admin_debit", "admin", str(ctx.author.id), {"reason": reason})
+        except EconomyError:
+            await ctx.send(view=simple_view("# Insufficient Balance", "The member does not have enough HZL.", discord.Colour.red()))
+            return
+        await self.bot.db.execute("INSERT INTO audit_logs(actor_id,action,target_id,details) VALUES(?,?,?,?)",
+                                   (ctx.author.id, "economy.debit", str(member.id), reason))
+        await ctx.send(view=simple_view(
+            "# HZL Adjustment",
+            "**%s** lost **%s HZL**.\nBalance: %s → %s HZL\nReason: %s"
+            % (member.display_name, format(amount, ","), format(before, ","), format(after, ","), reason)
+        ))
+
+
+async def setup(bot: commands.Bot) -> None:
+    await bot.add_cog(EconomyCog(bot))
+    await bot.add_cog(HostingCog(bot))
+    await bot.add_cog(AdminCog(bot))
