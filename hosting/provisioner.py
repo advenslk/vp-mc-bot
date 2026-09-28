@@ -64,6 +64,35 @@ class ProvisioningService:
             await message.edit(view=provisioning_view(plan_key, stage, percent, detail, status))
         except Exception:
             self.logger.debug("Could not update provisioning progress for job %s", job_id, exc_info=True)
+    async def cleanup_failed_resource(self, row) -> None:
+        """Best-effort cleanup of a partially created Proxmox resource."""
+        job = await self.db.fetchone("SELECT vmid FROM provisioning_jobs WHERE id=?", (int(row["id"]),))
+        if not job or job["vmid"] is None:
+            return
+        try:
+            metadata = json.loads(row["metadata"] or "{}")
+        except (TypeError, ValueError):
+            metadata = {}
+        provider = str(metadata.get("provider", "lxc")).lower()
+        node = metadata.get("node") or self.settings.proxmox_default_node
+        cluster = metadata.get("cluster") or self.settings.proxmox_default_node
+        client = self.client(str(cluster) if cluster else None)
+        if not client or not node:
+            return
+        vmid = int(job["vmid"])
+        try:
+            if provider == "lxc":
+                await client.delete_container(str(node), vmid, purge=True)
+            elif provider != "pterodactyl":
+                await client.delete_vm(str(node), vmid, purge=True)
+            self.logger.info("Cleaned up partial Proxmox resource VMID %s after provisioning failure", vmid)
+        except Exception as cleanup_exc:
+            self.logger.warning(
+                "Could not clean up partial Proxmox resource VMID %s: %s",
+                vmid,
+                cleanup_exc,
+            )
+
     async def run_once(self) -> None:
         await self.recover_interrupted_jobs()
         await self.enqueue_pending()
@@ -109,6 +138,7 @@ class ProvisioningService:
             return
         except Exception as exc:
             self.logger.exception("Provisioning job %s failed", job_id)
+            await self.cleanup_failed_resource(row)
             await self.db.execute(
                 "UPDATE provisioning_jobs SET status='failed',last_error=?,finished_at=CURRENT_TIMESTAMP WHERE id=?",
                 (str(exc)[:1000], job_id),
@@ -164,7 +194,16 @@ class ProvisioningService:
             return
 
         await self.progress(job_id, plan_key, "Allocating resource", 35, "Node selected. Allocating the next available VMID.")
-        vmid = await client.next_vmid()
+        reserved_rows = await self.db.fetchall(
+            "SELECT vmid FROM provisioning_jobs "
+            "WHERE vmid IS NOT NULL AND status IN ('queued','running','failed')"
+        )
+        reserved_vmids = {int(r["vmid"]) for r in reserved_rows if r["vmid"] is not None}
+        vmid = await client.next_vmid(reserved_vmids)
+        await self.db.execute(
+            "UPDATE provisioning_jobs SET vmid=? WHERE id=? AND status='running'",
+            (vmid, job_id),
+        )
 
         vps_username = "root"
         vps_password = secrets.token_urlsafe(15)
@@ -268,7 +307,7 @@ class ProvisioningService:
                 await client.vm_action(node_name, vmid, "start")
 
         await self.db.execute(
-            "UPDATE provisioning_jobs SET status='completed',server_id=?,finished_at=CURRENT_TIMESTAMP WHERE id=?",
+            "UPDATE provisioning_jobs SET status='completed',server_id=?,vmid=NULL,finished_at=CURRENT_TIMESTAMP WHERE id=?",
             (server_id, int(row["id"])),
         )
         await self.db.execute(
