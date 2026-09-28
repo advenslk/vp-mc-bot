@@ -36,6 +36,27 @@ class AccountService:
     def token_hash(token: str) -> str:
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
+    async def create_link_code(self, user_id: int, minutes: int = 10) -> str:
+        raw = secrets.token_urlsafe(18)
+        expires = (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
+        await self.db.execute(
+            "INSERT INTO account_link_codes(user_id,code_hash,expires_at) VALUES(?,?,?)",
+            (user_id, self.token_hash(raw), expires),
+        )
+        return raw
+
+    async def consume_link_code(self, raw_code: str) -> int | None:
+        now = datetime.now(timezone.utc).isoformat()
+        async with self.db.transaction() as db:
+            row = await (await db.execute(
+                "SELECT id,user_id FROM account_link_codes WHERE code_hash=? AND used_at IS NULL AND expires_at>?",
+                (self.token_hash(raw_code), now),
+            )).fetchone()
+            if not row:
+                return None
+            await db.execute("UPDATE account_link_codes SET used_at=CURRENT_TIMESTAMP WHERE id=?", (row["id"],))
+            return int(row["user_id"])
+
     async def register(self, user_id: int, email: str, password: str) -> str:
         email = email.strip().lower()
         if "@" not in email or len(email) > 254:
