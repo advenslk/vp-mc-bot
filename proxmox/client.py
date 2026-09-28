@@ -64,11 +64,22 @@ class ProxmoxClient:
         if response.status_code >= 400:
             body = response.text[:1000]
             if response.status_code == 403 and "Permission check failed" in body:
-                raise ProxmoxConfigurationError(
+                message = (
                     "Proxmox API permission denied: %s. "
                     "Fix the token ACL on the indicated Proxmox path; the provisioning job will remain queued and retry automatically."
                     % body
                 )
+                if "SDN.Use" in body:
+                    token_id = self.config.token_id
+                    user_id = token_id.split("!", 1)[0]
+                    message += (
+                        " This Proxmox version requires SDN.Use for the bridge/VNet used by the LXC template. "
+                        "On the Proxmox host, grant the backing user and the privilege-separated token access with: "
+                        "pveum acl modify /sdn/zones/localnetwork -user '%s' -role PVESDNUser && "
+                        "pveum acl modify /sdn/zones/localnetwork -token '%s' -role PVESDNUser"
+                        % (user_id, token_id)
+                    )
+                raise ProxmoxConfigurationError(message)
             raise ProxmoxError("Proxmox returned HTTP %s: %s" % (response.status_code, body[:500]))
         payload = response.json()
         if isinstance(payload, dict) and payload.get("errors"):
