@@ -104,6 +104,35 @@ class HelzerXBot(commands.Bot):
                     (milestone, reward),
                 )
 
+            reward_rules = [
+                ("message", "Message Activity", 2, 60, 100),
+                ("voice_10m", "Voice Activity", 10, 600, 120),
+                ("daily", "Daily Check-in", 100, 86400, 1),
+            ]
+            for key, name, amount, cooldown, daily_limit in reward_rules:
+                await db.execute(
+                    """INSERT INTO reward_rules(reward_key,name,amount,cooldown_seconds,daily_limit,description)
+                       VALUES(?,?,?,?,?,?)
+                       ON CONFLICT(reward_key) DO UPDATE SET name=excluded.name,
+                       amount=excluded.amount,cooldown_seconds=excluded.cooldown_seconds,
+                       daily_limit=excluded.daily_limit,description=excluded.description""",
+                    (key, name, amount, cooldown, daily_limit, "Configurable HelzerX community reward."),
+                )
+            quests = [
+                ("daily_messages", "Daily Messages", "Send 10 eligible community messages.", 10, 50, "daily"),
+                ("daily_voice", "Daily Voice", "Participate in eligible voice activity 6 times.", 6, 75, "daily"),
+                ("weekly_invites", "Weekly Builder", "Earn 3 verified invites.", 3, 250, "weekly"),
+            ]
+            for q in quests:
+                await db.execute(
+                    """INSERT INTO quests(quest_key,name,description,target,reward,period)
+                       VALUES(?,?,?,?,?,?)
+                       ON CONFLICT(quest_key) DO UPDATE SET name=excluded.name,
+                       description=excluded.description,target=excluded.target,reward=excluded.reward,
+                       period=excluded.period""",
+                    q,
+                )
+
     async def on_ready(self) -> None:
         assert self.user is not None
         self.logger.info("Logged in as %s (%s)", self.user, self.user.id)
