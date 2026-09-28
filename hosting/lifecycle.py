@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timezone
 
 from proxmox.client import ProxmoxClient, ProxmoxConfig, ProxmoxError
+from minecraft.client import PterodactylClient, PterodactylConfig
 
 
 class LifecycleService:
@@ -23,6 +24,16 @@ class LifecycleService:
             verify_ssl=s.proxmox_verify_ssl,
         ))
 
+    def pterodactyl(self) -> PterodactylClient | None:
+        s = self.bot.settings
+        if not all((s.pterodactyl_url, s.pterodactyl_api_key)):
+            return None
+        return PterodactylClient(PterodactylConfig(
+            base_url=s.pterodactyl_url,
+            api_key=s.pterodactyl_api_key,
+            verify_ssl=s.proxmox_verify_ssl,
+        ))
+
     async def expire_due(self) -> int:
         rows = await self.bot.db.fetchall(
             "SELECT id,vmid,kind,metadata FROM vps_servers "
@@ -34,10 +45,12 @@ class LifecycleService:
             try:
                 meta = json.loads(row["metadata"] or "{}")
                 node = meta.get("node") or self.bot.settings.proxmox_default_node
-                if client and node and row["vmid"]:
-                    if row["kind"] == "minecraft":
-                        await client.container_action(node, int(row["vmid"]), "stop")
-                    elif meta.get("provider") == "lxc":
+                if meta.get("provider") == "pterodactyl" and row["provider_id"]:
+                    ptero = self.pterodactyl()
+                    if ptero:
+                        await ptero.suspend(str(row["provider_id"]))
+                elif client and node and row["vmid"]:
+                    if meta.get("provider") == "lxc":
                         await client.container_action(node, int(row["vmid"]), "stop")
                     else:
                         await client.vm_action(node, int(row["vmid"]), "shutdown")
@@ -69,7 +82,11 @@ class LifecycleService:
         client = self.client()
         meta = json.loads(row["metadata"] or "{}")
         node = meta.get("node") or self.bot.settings.proxmox_default_node
-        if client and node and row["vmid"]:
+        if meta.get("provider") == "pterodactyl" and row["provider_id"]:
+            ptero = self.pterodactyl()
+            if ptero:
+                await ptero.delete(str(row["provider_id"]), force=True)
+        elif client and node and row["vmid"]:
             if meta.get("provider") == "lxc":
                 await client.delete_container(node, int(row["vmid"]))
             else:
