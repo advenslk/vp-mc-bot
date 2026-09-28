@@ -38,6 +38,11 @@ class PterodactylClient:
             raise PterodactylError("Pterodactyl HTTP %s: %s" % (response.status_code, response.text[:500]))
         return response.json()
 
+    async def find_user(self, email: str) -> dict[str, Any] | None:
+        payload = await self.request("GET", "users", params={"filter[email]": email, "per_page": 1})
+        data = payload.get("data", []) if isinstance(payload, dict) else []
+        return data[0] if data else None
+
     async def create_user(self, username: str, email: str, first_name: str, last_name: str = "User") -> dict[str, Any]:
         return await self.request("POST", "users", json={
             "username": username[:191],
