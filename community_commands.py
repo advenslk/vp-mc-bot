@@ -22,7 +22,7 @@ class CommunityCog(commands.Cog):
             "### Admin\n"
             "%sadmin-add · %sadmin-remove · %sadmin-plan-cost <plan> <hzl> · %sadmin-plan-toggle <plan> <0|1>\n\n"
             "All reward accounting is recorded in the HZL transaction ledger."
-        ) % (p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p)
+        ) % (p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p)
         await ctx.send(view=simple_view("# HelzerX Cloud Command Center", body))
 
     @commands.command(name="quests")
