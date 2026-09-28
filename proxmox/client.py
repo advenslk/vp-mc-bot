@@ -62,7 +62,14 @@ class ProxmoxClient:
         except httpx.HTTPError as exc:
             raise ProxmoxError("Proxmox HTTP client error: %s" % exc) from exc
         if response.status_code >= 400:
-            raise ProxmoxError("Proxmox returned HTTP %s: %s" % (response.status_code, response.text[:500]))
+            body = response.text[:1000]
+            if response.status_code == 403 and "Permission check failed" in body:
+                raise ProxmoxConfigurationError(
+                    "Proxmox API permission denied: %s. "
+                    "Fix the token ACL on the indicated Proxmox path; the provisioning job will remain queued and retry automatically."
+                    % body
+                )
+            raise ProxmoxError("Proxmox returned HTTP %s: %s" % (response.status_code, body[:500]))
         payload = response.json()
         if isinstance(payload, dict) and payload.get("errors"):
             raise ProxmoxError(str(payload["errors"]))
@@ -99,19 +106,7 @@ class ProxmoxClient:
         params = {"newid": newid, "hostname": hostname}
         if storage:
             params["storage"] = storage
-        try:
-            return await self.request("POST", "nodes/%s/lxc/%s/clone" % (node, template_vmid), **params)
-        except ProxmoxError as exc:
-            message = str(exc)
-            if "VM.Clone" in message and "/vms/%s" % template_vmid in message:
-                raise ProxmoxConfigurationError(
-                    "Proxmox API token lacks VM.Clone on /vms/%s. "
-                    "Run on the Proxmox host: "
-                    "pveum acl modify /vms/%s -user 'helzerx-bot@pam' -role PVEVMAdmin. "
-                    "Then the queued VPS job will retry automatically."
-                    % (template_vmid, template_vmid)
-                ) from exc
-            raise
+        return await self.request("POST", "nodes/%s/lxc/%s/clone" % (node, template_vmid), **params)
 
     async def set_container_config(self, node: str, vmid: int, config: dict[str, Any]) -> Any:
         return await self.request("PUT", "nodes/%s/lxc/%s/config" % (node, vmid), **config)
