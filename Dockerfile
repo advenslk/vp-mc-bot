@@ -14,6 +14,7 @@ RUN useradd --create-home --uid 10001 bot \
     && mkdir -p /app/data \
     && chown -R bot:bot /app
 
-USER bot
-
+# Compose runs the service as root because /app/data is a bind mount whose
+# host ownership may not match the image's non-root UID. The application never
+# needs host access outside the mounted data directory.
 CMD ["python", "bot.py"]
