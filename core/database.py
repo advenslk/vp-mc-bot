@@ -297,9 +297,12 @@ class Database:
         return db
 
     async def initialize(self) -> None:
-        async with self.connect() as db:
+        db = await self.connect()
+        try:
             await db.executescript(SCHEMA)
             await db.commit()
+        finally:
+            await db.close()
 
     @asynccontextmanager
     async def transaction(self):
@@ -317,16 +320,25 @@ class Database:
 
     async def execute(self, query: str, params: tuple[Any, ...] = ()) -> None:
         async with self._write_lock:
-            async with self.connect() as db:
+            db = await self.connect()
+            try:
                 await db.execute(query, params)
                 await db.commit()
+            finally:
+                await db.close()
 
     async def fetchone(self, query: str, params: tuple[Any, ...] = ()) -> aiosqlite.Row | None:
-        async with self.connect() as db:
+        db = await self.connect()
+        try:
             cursor = await db.execute(query, params)
             return await cursor.fetchone()
+        finally:
+            await db.close()
 
     async def fetchall(self, query: str, params: tuple[Any, ...] = ()) -> list[aiosqlite.Row]:
-        async with self.connect() as db:
+        db = await self.connect()
+        try:
             cursor = await db.execute(query, params)
             return await cursor.fetchall()
+        finally:
+            await db.close()
