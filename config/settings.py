@@ -48,6 +48,13 @@ class Settings:
     proxmox_bridge: str
     proxmox_start: bool
     provisioning_interval: int
+    pterodactyl_url: str | None
+    pterodactyl_api_key: str | None
+    pterodactyl_nest_id: int | None
+    pterodactyl_egg_id: int | None
+    pterodactyl_location_id: int | None
+    pterodactyl_docker_image: str
+    pterodactyl_startup: str
 
 
 def _optional_int(name: str) -> int | None:
@@ -86,4 +93,11 @@ def load_settings() -> Settings:
         proxmox_bridge=os.getenv("PROXMOX_BRIDGE", "vmbr0"),
         proxmox_start=os.getenv("PROXMOX_START", "true").lower() in {"1", "true", "yes"},
         provisioning_interval=max(10, int(os.getenv("PROVISIONING_INTERVAL", "20"))),
+        pterodactyl_url=os.getenv("PTERODACTYL_URL") or None,
+        pterodactyl_api_key=os.getenv("PTERODACTYL_API_KEY") or None,
+        pterodactyl_nest_id=_optional_int("PTERODACTYL_NEST_ID"),
+        pterodactyl_egg_id=_optional_int("PTERODACTYL_EGG_ID"),
+        pterodactyl_location_id=_optional_int("PTERODACTYL_LOCATION_ID"),
+        pterodactyl_docker_image=os.getenv("PTERODACTYL_DOCKER_IMAGE", "ghcr.io/pterodactyl/yolks:java_21"),
+        pterodactyl_startup=os.getenv("PTERODACTYL_STARTUP", "java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}} nogui"),
     )
