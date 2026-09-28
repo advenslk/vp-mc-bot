@@ -33,9 +33,25 @@ class ProxmoxClient:
         return self.config.base_url.rstrip("/") + "/api2/json/" + path.lstrip("/")
 
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
-        timeout = kwargs.pop("timeout", 30.0)
-        async with httpx.AsyncClient(verify=self.config.verify_ssl, timeout=timeout) as client:
-            response = await client.request(method, self._url(path), headers=self.headers, **kwargs)
+        timeout = kwargs.pop("timeout", httpx.Timeout(30.0, connect=10.0))
+        url = self._url(path)
+        try:
+            async with httpx.AsyncClient(verify=self.config.verify_ssl, timeout=timeout) as client:
+                response = await client.request(method, url, headers=self.headers, **kwargs)
+        except httpx.ConnectTimeout as exc:
+            raise ProxmoxError(
+                "Could not connect to Proxmox API within 10 seconds: %s. "
+                "Check PROXMOX_API_URL/PROXMOX_CLUSTERS_JSON, DNS, firewall and TCP port 8006."
+                % self.config.base_url
+            ) from exc
+        except httpx.ConnectError as exc:
+            raise ProxmoxError(
+                "Could not connect to Proxmox API: %s. "
+                "Check DNS, routing and TCP port 8006 from the bot container."
+                % self.config.base_url
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise ProxmoxError("Proxmox HTTP client error: %s" % exc) from exc
         if response.status_code >= 400:
             raise ProxmoxError("Proxmox returned HTTP %s: %s" % (response.status_code, response.text[:500]))
         payload = response.json()
