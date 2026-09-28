@@ -208,7 +208,12 @@ CREATE TABLE IF NOT EXISTS provisioning_jobs (
     last_error TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     started_at TEXT,
-    finished_at TEXT
+    finished_at TEXT,
+    channel_id INTEGER,
+    message_id INTEGER,
+    progress_stage TEXT,
+    progress_percent INTEGER NOT NULL DEFAULT 0,
+    progress_detail TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_provisioning_status ON provisioning_jobs(status);
@@ -300,6 +305,22 @@ class Database:
         db = await self.connect()
         try:
             await db.executescript(SCHEMA)
+            columns = {
+                "channel_id": "INTEGER",
+                "message_id": "INTEGER",
+                "progress_stage": "TEXT",
+                "progress_percent": "INTEGER NOT NULL DEFAULT 0",
+                "progress_detail": "TEXT",
+            }
+            existing = {
+                row["name"]
+                for row in await (await db.execute("PRAGMA table_info(provisioning_jobs)")).fetchall()
+            }
+            for name, definition in columns.items():
+                if name not in existing:
+                    await db.execute(
+                        "ALTER TABLE provisioning_jobs ADD COLUMN %s %s" % (name, definition)
+                    )
             await db.commit()
         finally:
             await db.close()
