@@ -66,7 +66,10 @@ class VPSCog(commands.Cog):
         client = self.client(metadata.get("cluster") or node)
         if client and row["vmid"] and node:
             try:
-                status = await client.vm_status(node, int(row["vmid"]))
+                if metadata.get("provider") == "lxc":
+                    status = await client.container_status(node, int(row["vmid"]))
+                else:
+                    status = await client.vm_status(node, int(row["vmid"]))
                 body += "\n**Provider status:** %s" % status.get("status", "unknown")
             except Exception:
                 pass
