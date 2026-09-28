@@ -93,3 +93,20 @@ def plans_view(kind: str, plans: list) -> discord.ui.LayoutView:
     view.add_item(container)
     return view
 
+
+def provisioning_view(plan_key: str, stage: str, percent: int, detail: str, status: str = "provisioning") -> discord.ui.LayoutView:
+    percent = max(0, min(100, int(percent)))
+    filled = int(round(percent / 10))
+    bar = "█" * filled + "░" * (10 - filled)
+    view = discord.ui.LayoutView(timeout=300)
+    container = discord.ui.Container()
+    container.add_item(discord.ui.TextDisplay("# HelzerX Cloud — VPS Provisioning"))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay(
+        "### `%s`\n`%s` **%s%%**\n\n**Stage:** %s\n%s\n\n**Status:** `%s`"
+        % (plan_key, bar, percent, stage, detail, status)
+    ))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay("This message updates automatically while the VPS is being prepared."))
+    view.add_item(container)
+    return view
