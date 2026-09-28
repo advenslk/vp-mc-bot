@@ -83,8 +83,8 @@ class HostingService:
             before = int(wallet["balance"])
             after = before + cost
             await db.execute(
-                "UPDATE wallets SET balance=?, lifetime_spent=lifetime_spent-?, lifetime_earned=lifetime_earned+?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?",
-                (after, cost, cost, user_id),
+                "UPDATE wallets SET balance=?, lifetime_spent=MAX(0, lifetime_spent-?), updated_at=CURRENT_TIMESTAMP WHERE user_id=?",
+                (after, cost, user_id),
             )
             await db.execute(
                 "UPDATE redemptions SET status='refunded',failure_reason=?,completed_at=CURRENT_TIMESTAMP WHERE id=?",
