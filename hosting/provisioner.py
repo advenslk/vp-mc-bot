@@ -39,6 +39,15 @@ class ProvisioningService:
                 (int(row["id"]), "queued", "redemption:%s" % row["id"]),
             )
 
+    async def recover_interrupted_jobs(self) -> None:
+        # If the process/container restarted after a transient infrastructure error,
+        # never leave a customer redemption permanently stuck in a failed job state.
+        await self.db.execute(
+            "UPDATE provisioning_jobs SET status='queued',finished_at=NULL "
+            "WHERE status='failed' AND redemption_id IN "
+            "(SELECT id FROM redemptions WHERE status='provisioning')"
+        )
+
     async def progress(self, job_id: int, plan_key: str, stage: str, percent: int, detail: str, status: str = "provisioning") -> None:
         await self.db.execute(
             "UPDATE provisioning_jobs SET progress_stage=?,progress_percent=?,progress_detail=? WHERE id=?",
@@ -56,6 +65,7 @@ class ProvisioningService:
         except Exception:
             self.logger.debug("Could not update provisioning progress for job %s", job_id, exc_info=True)
     async def run_once(self) -> None:
+        await self.recover_interrupted_jobs()
         await self.enqueue_pending()
         row = await self.db.fetchone(
             "SELECT j.*,r.user_id,r.cost,p.plan_key,p.name,p.ram_mb,p.cpu_units,p.storage_gb,p.duration_days,p.metadata "
