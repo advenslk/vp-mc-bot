@@ -35,7 +35,8 @@ def test_next_vmid_uses_cluster_resources():
     assert asyncio.run(client.next_vmid()) == 104
 
 
-def test_docker_compose_allows_asyncio_socketpair():
+def test_docker_compose_runtime_configuration():
     compose = open("docker-compose.yml", encoding="utf-8").read()
     assert "apparmor=unconfined" in compose
     assert "security_opt:" in compose
+    assert "user: root" in compose
