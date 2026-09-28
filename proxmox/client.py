@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+import asyncio
+from urllib.parse import quote
 
 import httpx
 
@@ -133,6 +135,29 @@ class ProxmoxClient:
             "POST", "nodes/%s/lxc/%s/clone" % (node, template_vmid), **params
         )
 
+    async def wait_for_task(self, node: str, upid: str, timeout_seconds: int = 180, poll_seconds: float = 2.0) -> Any:
+        """Wait for a Proxmox task (such as an LXC clone) to finish."""
+        encoded = quote(str(upid), safe="")
+        deadline = asyncio.get_running_loop().time() + timeout_seconds
+        while True:
+            result = await self.request("GET", "nodes/%s/tasks/%s/status" % (node, encoded))
+            status = str((result or {}).get("status", "")).lower()
+            if status == "stopped":
+                exitstatus = str((result or {}).get("exitstatus", "")).lower()
+                if exitstatus not in {"ok", ""}:
+                    raise ProxmoxError("Proxmox task failed: %s" % str(result)[:1000])
+                return result
+            if asyncio.get_running_loop().time() >= deadline:
+                raise ProxmoxError("Proxmox task did not finish within %s seconds: %s" % (timeout_seconds, upid))
+            await asyncio.sleep(poll_seconds)
+
+    async def clone_container_and_wait(self, node: str, template_vmid: int, newid: int, hostname: str, storage: str | None = None, full: bool = True) -> Any:
+        """Start an LXC clone and wait until the clone lock is released."""
+        result = await self.clone_container(node, template_vmid, newid, hostname, storage, full)
+        upid = result.get("data") if isinstance(result, dict) else result
+        if upid:
+            await self.wait_for_task(node, str(upid))
+        return result
     async def set_container_config(self, node: str, vmid: int, config: dict[str, Any]) -> Any:
         return await self.request("PUT", "nodes/%s/lxc/%s/config" % (node, vmid), **config)
 
