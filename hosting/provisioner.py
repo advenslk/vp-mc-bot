@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from proxmox.client import ProxmoxClient, ProxmoxConfig, ProxmoxError
 from minecraft.client import PterodactylClient, PterodactylConfig, PterodactylError
+from core.components import provisioning_view
 
 
 class ProvisioningService:
@@ -38,6 +39,22 @@ class ProvisioningService:
                 (int(row["id"]), "queued", "redemption:%s" % row["id"]),
             )
 
+    async def progress(self, job_id: int, plan_key: str, stage: str, percent: int, detail: str, status: str = "provisioning") -> None:
+        await self.db.execute(
+            "UPDATE provisioning_jobs SET progress_stage=?,progress_percent=?,progress_detail=? WHERE id=?",
+            (stage, max(0, min(100, int(percent))), detail[:1000], job_id),
+        )
+        row = await self.db.fetchone("SELECT channel_id,message_id FROM provisioning_jobs WHERE id=?", (job_id,))
+        if not row or not row["channel_id"] or not row["message_id"]:
+            return
+        try:
+            channel = self.bot.get_channel(int(row["channel_id"]))
+            if channel is None:
+                channel = await self.bot.fetch_channel(int(row["channel_id"]))
+            message = await channel.fetch_message(int(row["message_id"]))
+            await message.edit(view=provisioning_view(plan_key, stage, percent, detail, status))
+        except Exception:
+            self.logger.debug("Could not update provisioning progress for job %s", job_id, exc_info=True)
     async def run_once(self) -> None:
         await self.enqueue_pending()
         row = await self.db.fetchone(
@@ -65,6 +82,8 @@ class ProvisioningService:
             "UPDATE provisioning_jobs SET status='running',attempts=attempts+1,started_at=CURRENT_TIMESTAMP WHERE id=? AND status='queued'",
             (job_id,),
         )
+        await self.db.execute("UPDATE redemptions SET status='provisioning' WHERE id=? AND status='pending'", (int(row["redemption_id"]),))
+        await self.progress(job_id, str(row["plan_key"]), "Preparing", 10, "Provisioning worker started. Validating the selected provider and target.")
         try:
             await self.provision(client, row)
         except Exception as exc:
@@ -73,6 +92,7 @@ class ProvisioningService:
                 "UPDATE provisioning_jobs SET status='failed',last_error=?,finished_at=CURRENT_TIMESTAMP WHERE id=?",
                 (str(exc)[:1000], job_id),
             )
+            await self.progress(job_id, str(row["plan_key"]), "Failed", 100, "Provisioning stopped: %s" % str(exc)[:700], "failed")
             attempts = int(row["attempts"]) + 1
             if attempts >= 3:
                 await self.bot.hosting.fail_and_refund(int(row["redemption_id"]), str(exc)[:500])
@@ -81,6 +101,9 @@ class ProvisioningService:
 
     async def provision(self, client: ProxmoxClient, row) -> None:
         settings = self.settings
+        job_id = int(row["id"])
+        plan_key = str(row["plan_key"])
+        await self.progress(job_id, plan_key, "Selecting node", 20, "Selecting a Proxmox node with the required resources.")
         try:
             plan_metadata = json.loads(row["metadata"] or "{}")
         except (TypeError, ValueError):
@@ -107,6 +130,7 @@ class ProvisioningService:
             available.sort(reverse=True)
             node_name = available[0][2]
 
+        await self.progress(job_id, plan_key, "Allocating resource", 35, "Node `%s` selected. Allocating the next available VMID." % node_name)
         vmid = await client.next_vmid()
         hostname = "hx-%s-%s" % (str(row["plan_key"]).lower(), secrets.token_hex(3))
         try:
@@ -123,6 +147,7 @@ class ProvisioningService:
         vps_password = secrets.token_urlsafe(15)
 
         if provider == "lxc":
+            await self.progress(job_id, plan_key, "Creating LXC", 50, "Cloning the prepared LXC template into VMID `%s`." % vmid)
             if not settings.proxmox_template_ctid:
                 raise ProxmoxError("PROXMOX_TEMPLATE_CTID is required for LXC plans.")
             await client.clone_container(
@@ -139,8 +164,10 @@ class ProvisioningService:
             if settings.proxmox_bridge:
                 config["net0"] = "name=eth0,bridge=%s,ip=dhcp" % settings.proxmox_bridge
             await client.set_container_config(node_name, vmid, config)
+            await self.progress(job_id, plan_key, "Applying resources", 70, "Applying RAM, CPU, hostname, network and VPS credentials.")
             kind = "vps"
         else:
+            await self.progress(job_id, plan_key, "Creating VPS", 50, "Cloning the prepared VM template into VMID `%s`." % vmid)
             if not settings.proxmox_template_vmid:
                 raise ProxmoxError("PROXMOX_TEMPLATE_VMID is required for QEMU plans.")
             await client.clone_vm(
@@ -156,6 +183,7 @@ class ProvisioningService:
             if settings.proxmox_bridge:
                 config["net0"] = "virtio,bridge=%s" % settings.proxmox_bridge
             await client.set_vm_config(node_name, vmid, config)
+            await self.progress(job_id, plan_key, "Applying resources", 70, "Applying RAM, CPU, hostname and network configuration.")
             kind = "vps"
 
         node_id = await self.db.fetchone(
@@ -184,12 +212,14 @@ class ProvisioningService:
                 (str(vmid), int(row["redemption_id"])),
             )
 
+        await self.progress(job_id, plan_key, "Starting VPS", 85, "Resource created successfully. Starting the VPS and waiting for finalization.")
         if settings.proxmox_start:
             if provider == "lxc":
                 await client.container_action(node_name, vmid, "start")
             else:
                 await client.vm_action(node_name, vmid, "start")
 
+        await self.progress(job_id, plan_key, "Finalizing", 95, "VPS is ready. Preparing the access details and final Discord notification.")
         user = self.bot.get_user(int(row["user_id"]))
         if user:
             try:
@@ -209,6 +239,8 @@ class ProvisioningService:
                 )
             except Exception:
                 self.logger.warning("Could not DM provisioning result to user %s", row["user_id"])
+
+        await self.progress(job_id, plan_key, "Completed", 100, "VPS provisioning is complete. Access details were generated and the resource is ready.", "completed")
 
     async def provision_minecraft(self, row, hostname: str) -> None:
         s = self.settings
