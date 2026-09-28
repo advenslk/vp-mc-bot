@@ -238,7 +238,7 @@ class AdminCog(commands.Cog):
             await ctx.send(view=simple_view("# Permission Denied", "This command is restricted to bot owners.", discord.Colour.red()))
             return
         provider = provider.lower()
-        if provider not in {"qemu", "lxc"}:
+        if provider not in {"qemu", "lxc", "pterodactyl"}:
             await ctx.send(view=simple_view("# Invalid Provider", "Use qemu or lxc.", discord.Colour.orange()))
             return
         row = await self.bot.db.fetchone("SELECT metadata FROM plans WHERE plan_key=?", (plan_key.upper(),))
