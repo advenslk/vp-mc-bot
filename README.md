@@ -175,3 +175,14 @@ The bot creates/reuses a non-admin Pterodactyl user, creates the server with the
 - `.vps-delete <id> CONFIRM`
 
 Destructive deletion requires the explicit `CONFIRM` argument and verifies ownership before deleting the provider resource.
+
+
+## Optional Web API
+
+Run the API separately with:
+
+```bash
+uvicorn web.api:app --host 0.0.0.0 --port 8000
+```
+
+Endpoints include account registration/verification/login/logout, authenticated plan listing, server listing and HZL redemption. Configure SMTP before enabling account verification in production.
