@@ -11,7 +11,7 @@ from hosting.service import HostingService
 class HostingRedemptionCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.hosting = HostingService(bot.db, bot.economy)
+        self.hosting = bot.hosting
 
     @commands.command(name="redeem")
     @commands.guild_only()
