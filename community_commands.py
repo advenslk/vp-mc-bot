@@ -12,12 +12,12 @@ class HelpView(discord.ui.LayoutView):
 
     def _categories(self) -> list[discord.SelectOption]:
         return [
-            discord.SelectOption(label="Overview", value="home", description="HelzerX Cloud command center", emoji="⌂"),
-            discord.SelectOption(label="Economy", value="economy", description="HZL balance, rewards and activity", emoji="◈"),
-            discord.SelectOption(label="Hosting", value="hosting", description="Minecraft, VPS plans and redemptions", emoji="◆"),
-            discord.SelectOption(label="VPS Management", value="vps", description="View and control your VPS resources", emoji="▣"),
-            discord.SelectOption(label="Account", value="account", description="Link and check your HelzerX account", emoji="◎"),
-            discord.SelectOption(label="Admin", value="admin", description="Owner-only administration commands", emoji="⚙"),
+            discord.SelectOption(label="Overview", value="home", description="HelzerX Cloud command center"),
+            discord.SelectOption(label="Economy", value="economy", description="HZL balance, rewards and activity"),
+            discord.SelectOption(label="Hosting", value="hosting", description="Minecraft, VPS plans and redemptions"),
+            discord.SelectOption(label="VPS Management", value="vps", description="View and control your VPS resources"),
+            discord.SelectOption(label="Account", value="account", description="Link and check your HelzerX account"),
+            discord.SelectOption(label="Admin", value="admin", description="Owner-only administration commands"),
         ]
 
     def _command(self, name: str, description: str) -> str:
@@ -98,8 +98,8 @@ class HelpView(discord.ui.LayoutView):
             "Prefix: `%s`" % p,
         ]))
 
-    async def _select_callback(self, interaction: discord.Interaction) -> None:
-        category = interaction.data.get("values", ["home"])[0]
+    async def _select_callback(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
+        category = select.values[0] if select.values else "home"
         self._render(category)
         await interaction.response.edit_message(view=self)
 
@@ -113,18 +113,26 @@ class HelpView(discord.ui.LayoutView):
 
         row = discord.ui.ActionRow()
         select = discord.ui.Select(
-            placeholder="Select a help category…",
+            placeholder="Select a help category",
             min_values=1,
             max_values=1,
             options=[
                 discord.SelectOption(
-                    label=option.label, value=option.value, description=option.description,
-                    emoji=option.emoji, default=(option.value == category),
+                    label=option.label,
+                    value=option.value,
+                    description=option.description,
+                    default=(option.value == category),
                 )
                 for option in self._categories()
             ],
         )
-        select.callback = self._select_callback
+
+        async def on_select(interaction: discord.Interaction) -> None:
+            selected = select.values[0] if select.values else "home"
+            self._render(selected)
+            await interaction.response.edit_message(view=self)
+
+        select.callback = on_select
         row.add_item(select)
         self.add_item(row)
 
