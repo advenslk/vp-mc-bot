@@ -265,6 +265,17 @@ CREATE TABLE IF NOT EXISTS server_events (
 );
 CREATE INDEX IF NOT EXISTS idx_server_events_server ON server_events(server_id,created_at DESC);
 
+
+CREATE TABLE IF NOT EXISTS account_link_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    code_hash TEXT UNIQUE NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_account_link_codes_hash ON account_link_codes(code_hash);
+
 CREATE TABLE IF NOT EXISTS discord_links (
     user_id INTEGER PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
