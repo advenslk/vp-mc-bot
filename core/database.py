@@ -202,6 +202,7 @@ CREATE TABLE IF NOT EXISTS provisioning_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     redemption_id INTEGER NOT NULL REFERENCES redemptions(id) ON DELETE CASCADE,
     server_id INTEGER REFERENCES vps_servers(id) ON DELETE SET NULL,
+    vmid INTEGER,
     status TEXT NOT NULL DEFAULT 'queued',
     attempts INTEGER NOT NULL DEFAULT 0,
     idempotency_key TEXT UNIQUE NOT NULL,
@@ -306,6 +307,7 @@ class Database:
         try:
             await db.executescript(SCHEMA)
             columns = {
+                "vmid": "INTEGER",
                 "channel_id": "INTEGER",
                 "message_id": "INTEGER",
                 "progress_stage": "TEXT",
