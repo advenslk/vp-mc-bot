@@ -182,6 +182,8 @@ class HelzerXBot(commands.Bot):
             "SELECT milestone,reward FROM invite_milestones WHERE milestone=? AND enabled=1",
             (count,),
         )
+        await self.economy.update_quest(inviter.id, "weekly_invites", 1)
+        await self.economy.unlock_achievement(inviter.id, "first_invite")
         if milestone:
             await self.economy.change_balance(
                 inviter.id, int(milestone["reward"]), "invite_reward", "verified_invite",
