@@ -4,3 +4,8 @@ python-dotenv>=1.0,<2
 argon2-cffi>=23.1,<26
 pydantic>=2.8,<3
 httpx>=0.27,<1
+
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+aiosmtplib>=3.0,<4
+email-validator>=2.2,<3
