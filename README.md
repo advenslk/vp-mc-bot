@@ -104,19 +104,32 @@ The bot now includes:
 
 ### Automatic VPS provisioning
 
-Configure a prepared Proxmox cloud-init/template VM and the following variables:
+For the current HelzerX Cloud VPS setup, use a prepared **LXC template** and configure:
 
 ```env
 PROXMOX_API_URL=https://your-proxmox:8006
-PROXMOX_TOKEN_ID=...
+PROXMOX_TOKEN_ID=helzerx-bot@pam!helzerx
 PROXMOX_TOKEN_SECRET=...
-PROXMOX_TEMPLATE_VMID=9000
-PROXMOX_STORAGE=local-lvm
+PROXMOX_TEMPLATE_CTID=9000
+PROXMOX_STORAGE=
 PROXMOX_BRIDGE=vmbr0
 PROXMOX_START=true
 ```
 
-The template should already have a supported OS, cloud-init/network configuration and a working disk layout. The bot does not create arbitrary operating-system images or expose Proxmox root credentials.
+The LXC template must exist and be cloneable. The API token needs `VM.Clone` on `/vms/9000`, VM management privileges on `/vms`, and `Datastore.AllocateSpace` on the target storage. The worker treats Proxmox HTTP 403 permission failures as provider-configuration states, keeps the redemption queued, and retries automatically instead of refunding a valid customer redemption.
+
+A practical scoped setup is:
+
+```bash
+pveum acl modify / -token 'helzerx-bot@pam!helzerx' -role PVEAuditor
+pveum acl modify /vms -token 'helzerx-bot@pam!helzerx' -role PVEVMAdmin
+pveum acl modify /storage -token 'helzerx-bot@pam!helzerx' -role PVEDatastoreUser
+pveum user token permissions helzerx-bot@pam helzerx
+```
+
+If the token uses privilege separation, the token ACLs above are intentional. The Proxmox token must still be constrained by the backing user permissions. The bot does not use a Proxmox root password.
+
+The worker also grows the cloned LXC rootfs to the plan's requested storage size; Proxmox does not support shrinking an existing rootfs during provisioning.
 
 ### Security model
 
