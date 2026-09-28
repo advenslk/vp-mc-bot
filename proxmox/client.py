@@ -105,3 +105,29 @@ class ProxmoxClient:
         if action not in {"start", "stop", "shutdown", "reboot"}:
             raise ValueError("Unsupported container action")
         return await self.request("POST", "nodes/%s/lxc/%s/status/%s" % (node, vmid, action))
+
+
+def client_from_settings(settings, cluster_name: str | None = None) -> ProxmoxClient | None:
+    """Build a client from a named JSON cluster, falling back to legacy env settings."""
+    cluster = None
+    name = cluster_name or settings.proxmox_default_node
+    clusters = getattr(settings, "proxmox_clusters", {}) or {}
+    if name:
+        cluster = clusters.get(name)
+    if cluster:
+        if not all(cluster.get(k) for k in ("api_url", "token_id", "token_secret")):
+            return None
+        return ProxmoxClient(ProxmoxConfig(
+            base_url=str(cluster["api_url"]),
+            token_id=str(cluster["token_id"]),
+            token_secret=str(cluster["token_secret"]),
+            verify_ssl=bool(cluster.get("verify_ssl", settings.proxmox_verify_ssl)),
+        ))
+    if not all((settings.proxmox_api_url, settings.proxmox_token_id, settings.proxmox_token_secret)):
+        return None
+    return ProxmoxClient(ProxmoxConfig(
+        base_url=settings.proxmox_api_url,
+        token_id=settings.proxmox_token_id,
+        token_secret=settings.proxmox_token_secret,
+        verify_ssl=settings.proxmox_verify_ssl,
+    ))
