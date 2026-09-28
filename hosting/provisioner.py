@@ -174,7 +174,12 @@ class ProvisioningService:
             if not settings.proxmox_template_ctid:
                 raise ProxmoxError("PROXMOX_TEMPLATE_CTID is required for LXC plans.")
             await client.clone_container(
-                node_name, int(settings.proxmox_template_ctid), vmid, hostname, settings.proxmox_storage
+                node_name,
+                int(settings.proxmox_template_ctid),
+                vmid,
+                hostname,
+                settings.proxmox_storage,
+                full=True,
             )
             target_storage_gb = int(row["storage_gb"] or 0)
             if target_storage_gb > 0:
