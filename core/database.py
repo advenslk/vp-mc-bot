@@ -236,6 +236,35 @@ CREATE TABLE IF NOT EXISTS account_tokens (
 
 CREATE INDEX IF NOT EXISTS idx_account_tokens_hash ON account_tokens(token_hash);
 
+CREATE TABLE IF NOT EXISTS reward_claims (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    reward_key TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    reference_id TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_reward_claims_user_key_date ON reward_claims(user_id,reward_key,created_at);
+
+CREATE TABLE IF NOT EXISTS node_health (
+    node_id INTEGER PRIMARY KEY REFERENCES proxmox_nodes(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'unknown',
+    free_memory_mb INTEGER,
+    total_memory_mb INTEGER,
+    cpu_load REAL,
+    last_checked_at TEXT,
+    error TEXT
+);
+
+CREATE TABLE IF NOT EXISTS server_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    server_id INTEGER NOT NULL REFERENCES vps_servers(id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL,
+    details TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_server_events_server ON server_events(server_id,created_at DESC);
+
 CREATE TABLE IF NOT EXISTS discord_links (
     user_id INTEGER PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
