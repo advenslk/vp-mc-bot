@@ -173,7 +173,7 @@ class ProvisioningService:
             await self.progress(job_id, plan_key, "Creating LXC", 50, "Cloning the prepared LXC template into VMID `%s`." % vmid)
             if not settings.proxmox_template_ctid:
                 raise ProxmoxError("PROXMOX_TEMPLATE_CTID is required for LXC plans.")
-            await client.clone_container(
+            await client.clone_container_and_wait(
                 node_name,
                 int(settings.proxmox_template_ctid),
                 vmid,
