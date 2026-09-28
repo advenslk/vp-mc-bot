@@ -230,6 +230,8 @@ class HelzerXBot(commands.Bot):
     async def voice_rewards(self) -> None:
         for guild in self.guilds:
             for channel in guild.voice_channels:
+                if guild.afk_channel and channel.id == guild.afk_channel.id:
+                    continue
                 members = [m for m in channel.members if not m.bot]
                 if len(members) < self.settings.voice_min_members:
                     continue
