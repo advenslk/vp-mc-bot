@@ -86,6 +86,16 @@ class HelzerXBot(commands.Bot):
                     "INSERT OR IGNORE INTO achievements(achievement_key,name,description,reward) VALUES(?,?,?,?)",
                     a,
                 )
+            milestones = [
+                (2, 200), (4, 600), (8, 900), (12, 1300), (16, 1700),
+                (24, 2400), (28, 2900), (34, 3400), (38, 4000), (42, 4500),
+            ]
+            for milestone, reward in milestones:
+                await db.execute(
+                    "INSERT INTO invite_milestones(milestone,reward) VALUES(?,?) "
+                    "ON CONFLICT(milestone) DO UPDATE SET reward=excluded.reward",
+                    (milestone, reward),
+                )
 
     async def on_ready(self) -> None:
         assert self.user is not None
@@ -124,12 +134,15 @@ class HelzerXBot(commands.Bot):
         created = await self.economy.record_invite(member.guild.id, inviter.id, member.id, used.code)
         if not created:
             return
-        # The first milestone is intentionally conservative. Full milestone
-        # configuration is stored in the database in the next provisioning layer.
-        if await self.economy.invite_count(member.guild.id, inviter.id) == 1:
+        count = await self.economy.invite_count(member.guild.id, inviter.id)
+        milestone = await self.db.fetchone(
+            "SELECT milestone,reward FROM invite_milestones WHERE milestone=? AND enabled=1",
+            (count,),
+        )
+        if milestone:
             await self.economy.change_balance(
-                inviter.id, 100, "invite_reward", "verified_invite",
-                str(member.id), {"invitee": member.id, "code": used.code},
+                inviter.id, int(milestone["reward"]), "invite_reward", "verified_invite",
+                str(member.id), {"invitee": member.id, "code": used.code, "milestone": count},
             )
 
     async def on_message(self, message: discord.Message) -> None:
