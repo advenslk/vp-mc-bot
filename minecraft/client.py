@@ -38,6 +38,16 @@ class PterodactylClient:
             raise PterodactylError("Pterodactyl HTTP %s: %s" % (response.status_code, response.text[:500]))
         return response.json()
 
+    async def create_user(self, username: str, email: str, first_name: str, last_name: str = "User") -> dict[str, Any]:
+        return await self.request("POST", "users", json={
+            "username": username[:191],
+            "email": email[:254],
+            "first_name": first_name[:191],
+            "last_name": last_name[:191],
+            "language": "en",
+            "root_admin": False,
+        })
+
     async def create_server(
         self,
         name: str,
