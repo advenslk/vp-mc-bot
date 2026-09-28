@@ -120,6 +120,30 @@ class VPSCog(commands.Cog):
     async def restart(self, ctx, server_id: int):
         await self.action(ctx, server_id, "reboot")
 
+    @commands.command(name="vps-delete")
+    @commands.guild_only()
+    async def delete(self, ctx, server_id: int, confirmation: str = ""):
+        if confirmation.upper() != "CONFIRM":
+            await ctx.send(view=simple_view(
+                "# Permanent VPS Deletion",
+                "This permanently deletes the provider resource. Use `%svps-delete %s CONFIRM` to continue."
+                % (self.bot.settings.prefix, server_id), discord.Colour.orange()
+            ))
+            return
+        row = await self.own_server(ctx, server_id)
+        if not row:
+            return
+        try:
+            ok = await self.bot.lifecycle.delete_server(server_id, ctx.author.id)
+        except ProxmoxError as exc:
+            await ctx.send(view=simple_view("# Deletion Failed", str(exc), discord.Colour.red()))
+            return
+        if ok:
+            await ctx.send(view=simple_view("# VPS Deleted", "VPS #%s has been permanently deleted." % server_id))
+        else:
+            await ctx.send(view=simple_view("# VPS Not Found", "That VPS no longer exists.", discord.Colour.orange()))
+
+
 
 async def setup(bot) -> None:
     await bot.add_cog(VPSCog(bot))
