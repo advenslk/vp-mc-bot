@@ -19,7 +19,7 @@ app = FastAPI(title="HelzerX Cloud API", version="1.0.0")
 
 
 class RegisterBody(BaseModel):
-    discord_user_id: int
+    link_code: str
     email: EmailStr
     password: str = Field(min_length=10, max_length=128)
 
@@ -57,8 +57,11 @@ async def health():
 
 @app.post("/auth/register")
 async def register(body: RegisterBody):
+    user_id = await accounts.consume_link_code(body.link_code)
+    if not user_id:
+        raise HTTPException(400, "Invalid or expired Discord link code.")
     try:
-        token = await accounts.register(body.discord_user_id, str(body.email), body.password)
+        token = await accounts.register(user_id, str(body.email), body.password)
     except AccountError as exc:
         raise HTTPException(400, str(exc))
     smtp = os.getenv("SMTP_HOST")
