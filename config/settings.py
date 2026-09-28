@@ -43,6 +43,7 @@ class Settings:
     proxmox_token_id: str | None
     proxmox_token_secret: str | None
     proxmox_template_vmid: int | None
+    proxmox_template_ctid: int | None
     proxmox_storage: str | None
     proxmox_bridge: str
     proxmox_start: bool
@@ -80,6 +81,7 @@ def load_settings() -> Settings:
         proxmox_token_id=os.getenv("PROXMOX_TOKEN_ID") or None,
         proxmox_token_secret=os.getenv("PROXMOX_TOKEN_SECRET") or None,
         proxmox_template_vmid=_optional_int("PROXMOX_TEMPLATE_VMID"),
+        proxmox_template_ctid=_optional_int("PROXMOX_TEMPLATE_CTID"),
         proxmox_storage=os.getenv("PROXMOX_STORAGE") or None,
         proxmox_bridge=os.getenv("PROXMOX_BRIDGE", "vmbr0"),
         proxmox_start=os.getenv("PROXMOX_START", "true").lower() in {"1", "true", "yes"},
