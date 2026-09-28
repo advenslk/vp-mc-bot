@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+import json
+import logging
+import secrets
+from datetime import datetime, timedelta, timezone
+
+from proxmox.client import ProxmoxClient, ProxmoxConfig, ProxmoxError
+
+
+class ProvisioningService:
+    """Idempotent redemption -> Proxmox VM worker.
+
+    It intentionally requires a prebuilt cloud-init/template VM. The template
+    supplies the OS, network defaults and disk layout; this service only clones
+    it and applies the plan's CPU/RAM/name settings.
+    """
+
+    def __init__(self, bot):
+        self.bot = bot
+        self.db = bot.db
+        self.settings = bot.settings
+        self.logger = logging.getLogger("helzerx.provisioning")
+
+    def client(self) -> ProxmoxClient | None:
+        s = self.settings
+        if not all((s.proxmox_api_url, s.proxmox_token_id, s.proxmox_token_secret, s.proxmox_template_vmid)):
+            return None
+        return ProxmoxClient(ProxmoxConfig(
+            base_url=s.proxmox_api_url,
+            token_id=s.proxmox_token_id,
+            token_secret=s.proxmox_token_secret,
+            verify_ssl=s.proxmox_verify_ssl,
+        ))
+
+    async def enqueue_pending(self) -> None:
+        rows = await self.db.fetchall(
+            "SELECT r.id FROM redemptions r LEFT JOIN provisioning_jobs j ON j.redemption_id=r.id "
+            "WHERE r.status='pending' AND j.id IS NULL ORDER BY r.id LIMIT 25"
+        )
+        for row in rows:
+            await self.db.execute(
+                "INSERT OR IGNORE INTO provisioning_jobs(redemption_id,status,idempotency_key) VALUES(?,?,?)",
+                (int(row["id"]), "queued", "redemption:%s" % row["id"]),
+            )
+
+    async def run_once(self) -> None:
+        await self.enqueue_pending()
+        client = self.client()
+        if client is None:
+            return
+        row = await self.db.fetchone(
+            "SELECT j.*,r.user_id,r.cost,p.plan_key,p.name,p.ram_mb,p.cpu_units,p.storage_gb,p.duration_days "
+            "FROM provisioning_jobs j JOIN redemptions r ON r.id=j.redemption_id "
+            "JOIN plans p ON p.id=r.plan_id WHERE j.status='queued' ORDER BY j.id LIMIT 1"
+        )
+        if not row:
+            return
+
+        job_id = int(row["id"])
+        await self.db.execute(
+            "UPDATE provisioning_jobs SET status='running',attempts=attempts+1,started_at=CURRENT_TIMESTAMP WHERE id=? AND status='queued'",
+            (job_id,),
+        )
+        try:
+            await self.provision(client, row)
+        except Exception as exc:
+            self.logger.exception("Provisioning job %s failed", job_id)
+            await self.db.execute(
+                "UPDATE provisioning_jobs SET status='failed',last_error=?,finished_at=CURRENT_TIMESTAMP WHERE id=?",
+                (str(exc)[:1000], job_id),
+            )
+            await self.bot.hosting.fail_and_refund(int(row["redemption_id"]), str(exc)[:500])
+
+    async def provision(self, client: ProxmoxClient, row) -> None:
+        settings = self.settings
+        node_name = settings.proxmox_default_node
+        if not node_name:
+            nodes = await client.nodes()
+            available = [n for n in nodes if n.get("status") == "online"]
+            if not available:
+                raise ProxmoxError("No online Proxmox nodes are available.")
+            node_name = available[0]["node"]
+
+        vmid = await client.next_vmid()
+        hostname = "hx-%s-%s" % (str(row["plan_key"]).lower(), secrets.token_hex(3))
+        clone_params = {}
+        if settings.proxmox_storage:
+            clone_params["storage"] = settings.proxmox_storage
+        await client.clone_vm(node_name, int(settings.proxmox_template_vmid), vmid, hostname, True)
+
+        config = {
+            "memory": int(row["ram_mb"]),
+            "cores": int(row["cpu_units"]),
+            "name": hostname,
+            "onboot": 1,
+            "agent": 1,
+        }
+        if settings.proxmox_storage:
+            config["scsihw"] = "virtio-scsi-pci"
+        if settings.proxmox_bridge:
+            config["net0"] = "virtio,bridge=%s" % settings.proxmox_bridge
+        await client.set_vm_config(node_name, vmid, config)
+
+        node_id = await self.db.fetchone(
+            "SELECT id FROM proxmox_nodes WHERE node_name=? LIMIT 1", (node_name,)
+        )
+        async with self.db.transaction() as db:
+            cur = await db.execute(
+                """INSERT INTO vps_servers
+                   (user_id,plan_id,node_id,vmid,hostname,kind,status,os,expires_at,provider_id,metadata)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    int(row["user_id"]), await self.plan_id(db, str(row["plan_key"])),
+                    int(node_id["id"]) if node_id else None, vmid, hostname, "vps",
+                    "active", "template", (datetime.now(timezone.utc)+timedelta(days=int(row["duration_days"]))).isoformat(),
+                    str(vmid), json.dumps({"node": node_name}, separators=(",", ":")),
+                ),
+            )
+            server_id = cur.lastrowid
+            await db.execute(
+                "UPDATE provisioning_jobs SET status='completed',server_id=?,finished_at=CURRENT_TIMESTAMP WHERE id=?",
+                (server_id, int(row["id"])),
+            )
+            await db.execute(
+                "UPDATE redemptions SET status='completed',provider_resource_id=?,completed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'",
+                (str(vmid), int(row["redemption_id"])),
+            )
+
+        if settings.proxmox_start:
+            await client.vm_action(node_name, vmid, "start")
+
+        user = self.bot.get_user(int(row["user_id"]))
+        if user:
+            try:
+                await user.send(
+                    "## HelzerX Cloud — VPS Provisioned\n"
+                    "Your VPS **%s** has been created.\n\n"
+                    "• Plan: **%s**\n• VMID: **%s**\n• Node: **%s**\n"
+                    "• RAM: **%s MB**\n• CPU: **%s cores**\n• Storage: **%s GB**\n\n"
+                    "Network credentials depend on your configured cloud-init template."
+                    % (hostname, row["plan_key"], vmid, node_name, row["ram_mb"], row["cpu_units"], row["storage_gb"])
+                )
+            except Exception:
+                self.logger.warning("Could not DM provisioning result to user %s", row["user_id"])
+
+    async def plan_id(self, db, plan_key: str) -> int:
+        row = await (await db.execute("SELECT id FROM plans WHERE plan_key=?", (plan_key,))).fetchone()
+        if not row:
+            raise RuntimeError("Plan disappeared during provisioning.")
+        return int(row["id"])
