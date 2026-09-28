@@ -81,20 +81,6 @@ class EconomyService:
                 remaining = int((last + timedelta(hours=24) - now).total_seconds())
                 if remaining > 0:
                     return False, remaining
-            rule = await (await conn.execute(
-                "SELECT daily_limit FROM reward_rules WHERE reward_key=? AND enabled=1",
-                (reward_key,),
-            )).fetchone()
-            if rule and int(rule["daily_limit"]) > 0:
-                count_row = await (await conn.execute(
-                    "SELECT COUNT(*) AS count FROM transactions "
-                    "WHERE user_id=? AND source=? AND transaction_type='credit' "
-                    "AND created_at >= date('now')",
-                    (user_id, source),
-                )).fetchone()
-                if int(count_row["count"]) >= int(rule["daily_limit"]):
-                    return False, 86400
-
             wallet = await (await conn.execute(
                 "SELECT balance FROM wallets WHERE user_id=?", (user_id,)
             )).fetchone()
@@ -131,6 +117,19 @@ class EconomyService:
                 remaining = cooldown_seconds - int((now - last).total_seconds())
                 if remaining > 0:
                     return False, remaining
+            rule = await (await conn.execute(
+                "SELECT daily_limit FROM reward_rules WHERE reward_key=? AND enabled=1",
+                (reward_key,),
+            )).fetchone()
+            if rule and int(rule["daily_limit"]) > 0:
+                count_row = await (await conn.execute(
+                    "SELECT COUNT(*) AS count FROM transactions WHERE user_id=? AND source=? "
+                    "AND transaction_type='credit' AND created_at >= date('now')",
+                    (user_id, source),
+                )).fetchone()
+                if int(count_row["count"]) >= int(rule["daily_limit"]):
+                    return False, 86400
+
             wallet = await (await conn.execute(
                 "SELECT balance FROM wallets WHERE user_id=?", (user_id,)
             )).fetchone()
@@ -151,6 +150,92 @@ class EconomyService:
                 (user_id, amount, before, after, "credit", source),
             )
             return True, amount
+
+    async def update_quest(self, user_id: int, quest_key: str, increment: int = 1) -> tuple[bool, int]:
+        if increment <= 0:
+            return False, 0
+        now = utcnow()
+        quest = await self.db.fetchone("SELECT * FROM quests WHERE quest_key=? AND enabled=1", (quest_key,))
+        if not quest:
+            return False, 0
+        if quest["period"] == "daily":
+            period_key = now.date().isoformat()
+        elif quest["period"] == "weekly":
+            period_key = "%d-W%02d" % (now.isocalendar().year, now.isocalendar().week)
+        else:
+            period_key = "lifetime"
+        async with self.db.transaction() as conn:
+            row = await (await conn.execute(
+                "SELECT progress,completed,rewarded FROM quest_progress WHERE user_id=? AND quest_id=? AND period_key=?",
+                (user_id, quest["id"], period_key),
+            )).fetchone()
+            progress = min(int(quest["target"]), (int(row["progress"]) if row else 0) + increment)
+            completed = int(progress >= int(quest["target"]))
+            rewarded = int(row["rewarded"]) if row else 0
+            await conn.execute(
+                """INSERT INTO quest_progress(user_id,quest_id,period_key,progress,completed,rewarded)
+                   VALUES(?,?,?,?,?,?)
+                   ON CONFLICT(user_id,quest_id,period_key) DO UPDATE SET
+                   progress=excluded.progress,completed=excluded.completed""",
+                (user_id, quest["id"], period_key, progress, completed, rewarded),
+            )
+            if completed and not rewarded:
+                wallet = await (await conn.execute("SELECT balance FROM wallets WHERE user_id=?", (user_id,))).fetchone()
+                before = int(wallet["balance"])
+                reward = int(quest["reward"])
+                await conn.execute("UPDATE wallets SET balance=?,lifetime_earned=lifetime_earned+?,updated_at=CURRENT_TIMESTAMP WHERE user_id=?",
+                                    (before + reward, reward, user_id))
+                await conn.execute("UPDATE quest_progress SET rewarded=1 WHERE user_id=? AND quest_id=? AND period_key=?",
+                                    (user_id, quest["id"], period_key))
+                await conn.execute(
+                    "INSERT INTO transactions(user_id,amount,balance_before,balance_after,transaction_type,source,reference_id) VALUES(?,?,?,?,?,?,?)",
+                    (user_id,reward,before,before+reward,"credit","quest",quest_key),
+                )
+                return True, reward
+            return False, progress
+
+    async def quests(self, user_id: int) -> list[Any]:
+        return await self.db.fetchall(
+            """SELECT q.quest_key,q.name,q.description,q.target,q.reward,q.period,
+                      COALESCE(qp.progress,0) progress,COALESCE(qp.completed,0) completed
+               FROM quests q LEFT JOIN quest_progress qp
+               ON qp.quest_id=q.id AND qp.user_id=?
+               AND qp.period_key=CASE WHEN q.period='daily' THEN date('now')
+                                      WHEN q.period='weekly' THEN strftime('%Y-W%W','now')
+                                      ELSE 'lifetime' END
+               WHERE q.enabled=1 ORDER BY q.id""",
+            (user_id,),
+        )
+
+    async def achievements(self, user_id: int) -> list[Any]:
+        return await self.db.fetchall(
+            """SELECT a.achievement_key,a.name,a.description,a.reward,ua.unlocked_at
+               FROM achievements a LEFT JOIN user_achievements ua
+               ON ua.achievement_key=a.achievement_key AND ua.user_id=?
+               ORDER BY ua.unlocked_at IS NULL,a.achievement_key""",
+            (user_id,),
+        )
+
+    async def unlock_achievement(self, user_id: int, achievement_key: str) -> bool:
+        async with self.db.transaction() as conn:
+            achievement = await (await conn.execute("SELECT * FROM achievements WHERE achievement_key=?", (achievement_key,))).fetchone()
+            if not achievement:
+                return False
+            cur = await conn.execute("INSERT OR IGNORE INTO user_achievements(user_id,achievement_key) VALUES(?,?)",
+                                     (user_id, achievement_key))
+            if cur.rowcount == 0:
+                return False
+            reward = int(achievement["reward"])
+            if reward:
+                wallet = await (await conn.execute("SELECT balance FROM wallets WHERE user_id=?", (user_id,))).fetchone()
+                before = int(wallet["balance"])
+                await conn.execute("UPDATE wallets SET balance=?,lifetime_earned=lifetime_earned+?,updated_at=CURRENT_TIMESTAMP WHERE user_id=?",
+                                    (before + reward,reward,user_id))
+                await conn.execute(
+                    "INSERT INTO transactions(user_id,amount,balance_before,balance_after,transaction_type,source,reference_id) VALUES(?,?,?,?,?,?,?)",
+                    (user_id,reward,before,before+reward,"credit","achievement",achievement_key),
+                )
+            return True
 
     async def leaderboard(self, limit: int = 10) -> list[Any]:
         return await self.db.fetchall(
