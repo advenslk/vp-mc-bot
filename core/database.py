@@ -159,6 +159,88 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     details TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS proxmox_nodes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    api_url TEXT NOT NULL,
+    node_name TEXT NOT NULL,
+    location TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    verify_ssl INTEGER NOT NULL DEFAULT 0,
+    token_id TEXT,
+    token_secret TEXT,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS vps_servers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    plan_id INTEGER NOT NULL REFERENCES plans(id),
+    node_id INTEGER REFERENCES proxmox_nodes(id),
+    vmid INTEGER,
+    hostname TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'vps' CHECK(kind IN ('vps','minecraft')),
+    status TEXT NOT NULL DEFAULT 'provisioning',
+    ipv4 TEXT,
+    ipv6 TEXT,
+    username TEXT,
+    os TEXT,
+    expires_at TEXT,
+    provider_id TEXT,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_vps_user_status ON vps_servers(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_vps_node ON vps_servers(node_id);
+
+CREATE TABLE IF NOT EXISTS provisioning_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    redemption_id INTEGER NOT NULL REFERENCES redemptions(id) ON DELETE CASCADE,
+    server_id INTEGER REFERENCES vps_servers(id) ON DELETE SET NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    idempotency_key TEXT UNIQUE NOT NULL,
+    last_error TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at TEXT,
+    finished_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_provisioning_status ON provisioning_jobs(status);
+
+CREATE TABLE IF NOT EXISTS accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER UNIQUE REFERENCES users(user_id) ON DELETE CASCADE,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    email_verified INTEGER NOT NULL DEFAULT 0,
+    locked INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS account_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    token_hash TEXT UNIQUE NOT NULL,
+    token_type TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_account_tokens_hash ON account_tokens(token_hash);
+
+CREATE TABLE IF NOT EXISTS discord_links (
+    user_id INTEGER PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    linked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 
