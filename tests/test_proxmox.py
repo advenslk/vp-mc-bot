@@ -110,3 +110,22 @@ def test_lxc_clone_full_clone_sends_storage():
         assert calls[0][2]["storage"] == "local-lvm"
 
     asyncio.run(run())
+
+
+def test_next_vmid_skips_reserved_provisioning_ids():
+    client = ProxmoxClient(
+        ProxmoxConfig(
+            base_url="https://pve.example:8006",
+            token_id="user@pam!bot",
+            token_secret="secret",
+        )
+    )
+
+    async def fake_resources():
+        return [
+            {"type": "lxc", "vmid": 100},
+            {"type": "lxc", "vmid": 101},
+        ]
+
+    client.cluster_resources = fake_resources
+    assert asyncio.run(client.next_vmid({102, 103})) == 104
