@@ -62,6 +62,8 @@ async def register(body: RegisterBody):
     except AccountError as exc:
         raise HTTPException(400, str(exc))
     smtp = os.getenv("SMTP_HOST")
+    if not smtp:
+        raise HTTPException(503, "Email verification is not configured.")
     if smtp:
         mail = EmailService(
             smtp, int(os.getenv("SMTP_PORT", "587")), os.getenv("SMTP_USERNAME", ""),
