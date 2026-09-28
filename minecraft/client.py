@@ -82,6 +82,11 @@ class PterodactylClient:
         }
         return await self.request("POST", "servers", json=payload)
 
+    async def power(self, server_id: str, signal: str) -> Any:
+        if signal not in {"start", "stop", "restart", "kill"}:
+            raise ValueError("Unsupported Pterodactyl power signal")
+        return await self.request("POST", "servers/%s/power" % server_id, json={"signal": signal})
+
     async def suspend(self, server_id: str) -> Any:
         return await self.request("POST", "servers/%s/suspend" % server_id)
 
