@@ -81,6 +81,20 @@ class EconomyService:
                 remaining = int((last + timedelta(hours=24) - now).total_seconds())
                 if remaining > 0:
                     return False, remaining
+            rule = await (await conn.execute(
+                "SELECT daily_limit FROM reward_rules WHERE reward_key=? AND enabled=1",
+                (reward_key,),
+            )).fetchone()
+            if rule and int(rule["daily_limit"]) > 0:
+                count_row = await (await conn.execute(
+                    "SELECT COUNT(*) AS count FROM transactions "
+                    "WHERE user_id=? AND source=? AND transaction_type='credit' "
+                    "AND created_at >= date('now')",
+                    (user_id, source),
+                )).fetchone()
+                if int(count_row["count"]) >= int(rule["daily_limit"]):
+                    return False, 86400
+
             wallet = await (await conn.execute(
                 "SELECT balance FROM wallets WHERE user_id=?", (user_id,)
             )).fetchone()
