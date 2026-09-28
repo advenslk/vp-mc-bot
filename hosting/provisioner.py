@@ -154,7 +154,7 @@ class ProvisioningService:
                     int(row["user_id"]), await self.plan_id(db, str(row["plan_key"])),
                     int(node_id["id"]) if node_id else None, vmid, hostname, kind,
                     "active", "template", (datetime.now(timezone.utc)+timedelta(days=int(row["duration_days"]))).isoformat(),
-                    str(vmid), json.dumps({"node": node_name}, separators=(",", ":")),
+                    str(vmid), json.dumps({"node": node_name, "provider": provider}, separators=(",", ":")),
                 ),
             )
             server_id = cur.lastrowid
