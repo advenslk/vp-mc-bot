@@ -238,8 +238,18 @@ class ProvisioningService:
                 )
             except Exception:
                 self.logger.warning("Could not DM provisioning result to user %s", row["user_id"])
+                await self.progress(
+                    job_id, plan_key, "Completed", 100,
+                    "VPS is ready, but Discord could not deliver the private DM. Run .vps-password %s to securely generate a new VPS password." % server_id,
+                    "completed",
+                )
+                return
 
-        await self.progress(job_id, plan_key, "Completed", 100, "VPS provisioning is complete. Access details were generated and the resource is ready.", "completed")
+        await self.progress(
+            job_id, plan_key, "Completed", 100,
+            "VPS provisioning is complete. Access details were sent to your Discord DM.",
+            "completed",
+        )
 
     async def provision_minecraft(self, row, hostname: str) -> None:
         s = self.settings
