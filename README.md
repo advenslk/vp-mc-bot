@@ -186,3 +186,8 @@ uvicorn web.api:app --host 0.0.0.0 --port 8000
 ```
 
 Endpoints include account registration/verification/login/logout, authenticated plan listing, server listing and HZL redemption. Configure SMTP before enabling account verification in production.
+
+
+## Account linking
+
+Users can run `.account-link` in Discord. The bot sends a short-lived one-time code by DM. The web registration endpoint requires that code, preventing arbitrary users from claiming another Discord user's hosting account.
