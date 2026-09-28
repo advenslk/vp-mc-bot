@@ -203,15 +203,6 @@ class ProvisioningService:
                 ),
             )
             server_id = cur.lastrowid
-            await db.execute(
-                "UPDATE provisioning_jobs SET status='completed',server_id=?,finished_at=CURRENT_TIMESTAMP WHERE id=?",
-                (server_id, int(row["id"])),
-            )
-            await db.execute(
-                "UPDATE redemptions SET status='completed',provider_resource_id=?,completed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'",
-                (str(vmid), int(row["redemption_id"])),
-            )
-
         await self.progress(job_id, plan_key, "Starting VPS", 85, "Resource created successfully. Starting the VPS and waiting for finalization.")
         if settings.proxmox_start:
             if provider == "lxc":
@@ -219,6 +210,14 @@ class ProvisioningService:
             else:
                 await client.vm_action(node_name, vmid, "start")
 
+        await self.db.execute(
+            "UPDATE provisioning_jobs SET status='completed',server_id=?,finished_at=CURRENT_TIMESTAMP WHERE id=?",
+            (server_id, int(row["id"])),
+        )
+        await self.db.execute(
+            "UPDATE redemptions SET status='completed',provider_resource_id=?,completed_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('pending','provisioning')",
+            (str(vmid), int(row["redemption_id"])),
+        )
         await self.progress(job_id, plan_key, "Finalizing", 95, "VPS is ready. Preparing the access details and final Discord notification.")
         user = self.bot.get_user(int(row["user_id"]))
         if user:
