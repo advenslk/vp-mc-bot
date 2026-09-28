@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import FileResponse
+from pathlib import Path
 from pydantic import BaseModel, EmailStr, Field
 
 from account.email import EmailService
@@ -13,6 +15,7 @@ db = Database(os.getenv("DATABASE_PATH", "data/helzerx.db"))
 accounts = AccountService(db)
 hosting = HostingService(db, None)  # replaced after economy initialization
 app = FastAPI(title="HelzerX Cloud API", version="1.0.0")
+WEB_ROOT = Path(__file__).resolve().parent
 
 
 class RegisterBody(BaseModel):
@@ -45,6 +48,11 @@ async def startup() -> None:
     await db.initialize()
     from economy.service import EconomyService
     hosting = HostingService(db, EconomyService(db))
+
+
+@app.get("/", include_in_schema=False)
+async def dashboard():
+    return FileResponse(WEB_ROOT / "static" / "index.html")
 
 
 @app.get("/health")
