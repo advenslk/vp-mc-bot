@@ -177,6 +177,36 @@ def test_qemu_clone_and_wait_waits_for_task(monkeypatch):
     assert waited == [("pve01", "UPID:test")]
 
 
+def test_lxc_clone_and_wait_does_not_pass_password_to_clone(monkeypatch):
+    client = ProxmoxClient(
+        ProxmoxConfig(
+            base_url="https://pve.example:8006",
+            token_id="user@pam!bot",
+            token_secret="secret",
+        )
+    )
+    calls = []
+
+    async def fake_clone(*args, **kwargs):
+        calls.append((args, kwargs))
+        return {"data": "UPID:test"}
+
+    async def fake_wait(node, upid, *args, **kwargs):
+        return {"status": "stopped", "exitstatus": "OK"}
+
+    monkeypatch.setattr(client, "clone_container", fake_clone)
+    monkeypatch.setattr(client, "wait_for_task", fake_wait)
+
+    result = asyncio.run(
+        client.clone_container_and_wait("pve01", 9000, 101, "hx-test", "local-lvm", True)
+    )
+
+    assert result["data"] == "UPID:test"
+    assert calls == [
+        (("pve01", 9000, 101, "hx-test", "local-lvm", True), {})
+    ]
+
+
 def test_set_container_password_uses_dedicated_passwd_endpoint():
     client = ProxmoxClient(
         ProxmoxConfig(
