@@ -1,6 +1,6 @@
 import asyncio
 
-from proxmox.client import ProxmoxClient, ProxmoxConfig
+from proxmox.client import ProxmoxClient, ProxmoxConfig, ProxmoxConfigurationError
 
 
 def test_proxmox_url_normalization():
@@ -55,5 +55,34 @@ def test_database_initializes_and_writes(tmp_path):
         await db.execute("INSERT INTO _write_test(value) VALUES(?)", ("ok",))
         row = await db.fetchone("SELECT value FROM _write_test WHERE id=1")
         assert row["value"] == "ok"
+
+    asyncio.run(run())
+
+
+def test_lxc_clone_acl_failure_is_configuration_error():
+    client = ProxmoxClient(
+        ProxmoxConfig(
+            base_url="https://pve.example:8006",
+            token_id="user@pam!bot",
+            token_secret="secret",
+        )
+    )
+
+    async def fake_request(*args, **kwargs):
+        from proxmox.client import ProxmoxError
+        raise ProxmoxError(
+            "Proxmox returned HTTP 403: Permission check failed (/vms/9000, VM.Clone)"
+        )
+
+    client.request = fake_request
+
+    async def run():
+        try:
+            await client.clone_container("pve01", 9000, 101, "hx-test")
+        except ProxmoxConfigurationError as exc:
+            assert "VM.Clone" in str(exc)
+            assert "pveum acl modify /vms/9000" in str(exc)
+        else:
+            raise AssertionError("Expected ProxmoxConfigurationError")
 
     asyncio.run(run())
