@@ -219,6 +219,29 @@ class AdminCog(commands.Cog):
         await ctx.send(view=simple_view("# Plan Updated", "%s now costs **%s HZL** for redemption." %
                                          (plan_key.upper(), format(hzl_cost, ","))))
 
+    @commands.command(name="admin-plan-set")
+    async def admin_plan_set(self, ctx: commands.Context, plan_key: str, price_usd: float, hzl_cost: int, duration_days: int) -> None:
+        if not await self._owner(ctx):
+            await ctx.send(view=simple_view("# Permission Denied", "This command is restricted to bot owners.", discord.Colour.red()))
+            return
+        key = plan_key.upper()
+        if price_usd < 0 or hzl_cost < 0 or duration_days < 1:
+            await ctx.send(view=simple_view("# Invalid Values", "Price/cost must be non-negative and duration must be at least 1 day.", discord.Colour.orange()))
+            return
+        row = await self.bot.db.fetchone("SELECT id FROM plans WHERE plan_key=?", (key,))
+        if not row:
+            await ctx.send(view=simple_view("# Plan Not Found", "Unknown plan key.", discord.Colour.orange()))
+            return
+        await self.bot.db.execute(
+            "UPDATE plans SET price_usd=?,hzl_cost=?,duration_days=?,updated_at=CURRENT_TIMESTAMP WHERE plan_key=?",
+            (price_usd, hzl_cost, duration_days, key),
+        )
+        await self.bot.db.execute(
+            "INSERT INTO audit_logs(actor_id,action,target_id,details) VALUES(?,?,?,?)",
+            (ctx.author.id, "plan.update", key, "price_usd=%s,hzl_cost=%s,duration_days=%s" % (price_usd, hzl_cost, duration_days)),
+        )
+        await ctx.send(view=simple_view("# Plan Updated", "%s · $%.2f · %s HZL · %s days" % (key, price_usd, hzl_cost, duration_days)))
+
     @commands.command(name="admin-plan-toggle")
     async def admin_plan_toggle(self, ctx: commands.Context, plan_key: str, enabled: int) -> None:
         if not await self._owner(ctx):
