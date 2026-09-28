@@ -220,6 +220,11 @@ class ProvisioningService:
         )
         await self.progress(job_id, plan_key, "Finalizing", 95, "VPS is ready. Preparing the access details and final Discord notification.")
         user = self.bot.get_user(int(row["user_id"]))
+        if user is None:
+            try:
+                user = await self.bot.fetch_user(int(row["user_id"]))
+            except Exception:
+                user = None
         if user:
             try:
                 await user.send(
