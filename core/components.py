@@ -13,20 +13,21 @@ def wallet_view(
     rewards_text: str = "",
 ) -> discord.ui.LayoutView:
     view = discord.ui.LayoutView(timeout=300)
-    view.add_item(discord.ui.TextDisplay("# %s HelzerX Wallet" % e("currency", "◈")))
-    view.add_item(discord.ui.Separator())
-    view.add_item(discord.ui.TextDisplay(
+    container = discord.ui.Container()
+    container.add_item(discord.ui.TextDisplay("# %s HelzerX Wallet" % e("currency", "◈")))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay(
         "### %s\n"
         "> **Balance:** `%s HZL`\n"
         "> **Verified Invites:** `%s`"
         % (display_name, format(balance, ","), invites)
     ))
-    view.add_item(discord.ui.Separator())
-    view.add_item(discord.ui.TextDisplay("### Recent Activity\n" + (recent or "No recent activity.")))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay("### Recent Activity\n" + (recent or "No recent activity.")))
 
     row = discord.ui.ActionRow()
     transactions_button = discord.ui.Button(label="Transactions", custom_id="wallet:transactions", style=discord.ButtonStyle.secondary, emoji=e("money", "◈"))
-    rewards_button = discord.ui.Button(label="Rewards", custom_id="wallet:rewards", style=discord.ButtonStyle.primary, emoji=e("gift", "◆"))
+    rewards_button = discord.ui.Button(label="Rewards", custom_id="wallet:rewards", style=discord.ButtonStyle.secondary, emoji=e("gift", "◆"))
 
     async def show_transactions(interaction: discord.Interaction) -> None:
         await interaction.response.send_message(
@@ -47,30 +48,34 @@ def wallet_view(
     rewards_button.callback = show_rewards
     row.add_item(transactions_button)
     row.add_item(rewards_button)
-    view.add_item(row)
+    container.add_item(row)
+    view.add_item(container)
     return view
 
 
 def simple_view(title: str, body: str, colour: discord.Colour = discord.Colour.blurple()) -> discord.ui.LayoutView:
     view = discord.ui.LayoutView(timeout=300)
-    view.add_item(discord.ui.TextDisplay(title))
-    view.add_item(discord.ui.Separator())
-    view.add_item(discord.ui.TextDisplay(body))
+    container = discord.ui.Container()
+    container.add_item(discord.ui.TextDisplay(title))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay(body))
+    view.add_item(container)
     return view
 
 
 def plans_view(kind: str, plans: list) -> discord.ui.LayoutView:
     view = discord.ui.LayoutView(timeout=300)
+    container = discord.ui.Container()
     icon = e("minecraft") if kind == "minecraft" else e("node")
-    view.add_item(discord.ui.TextDisplay("# %s HelzerX %s Plans" % (icon, kind.title())))
-    view.add_item(discord.ui.TextDisplay(
+    container.add_item(discord.ui.TextDisplay("# %s HelzerX %s Plans" % (icon, kind.title())))
+    container.add_item(discord.ui.TextDisplay(
         "Choose a plan that matches your resource needs. "
         "Use `.redeem <plan>` when you are ready to redeem a configured HZL plan."
     ))
-    view.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.Separator())
 
     if not plans:
-        view.add_item(discord.ui.TextDisplay("No plans are currently available."))
+        container.add_item(discord.ui.TextDisplay("No plans are currently available."))
     else:
         for index, p in enumerate(plans):
             body = (
@@ -82,7 +87,9 @@ def plans_view(kind: str, plans: list) -> discord.ui.LayoutView:
                 e("cpu", "CPU"), p["cpu_units"], e("disk", "Disk"), p["storage_gb"],
                 e("currency", "◈"), p["hzl_cost"], p["price_usd"], p["location"],
             )
-            view.add_item(discord.ui.TextDisplay(body))
+            container.add_item(discord.ui.TextDisplay(body))
             if index != len(plans) - 1:
-                view.add_item(discord.ui.Separator())
+                container.add_item(discord.ui.Separator())
+    view.add_item(container)
     return view
+
