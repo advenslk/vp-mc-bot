@@ -29,15 +29,15 @@ class LifecycleService:
 
     async def expire_due(self) -> int:
         rows = await self.bot.db.fetchall(
-            "SELECT id,vmid,kind,metadata FROM vps_servers "
+            "SELECT id,vmid,kind,metadata,provider_id FROM vps_servers "
             "WHERE status='active' AND expires_at IS NOT NULL AND datetime(expires_at)<=datetime('now')"
         )
-        client = self.client()
         count = 0
         for row in rows:
             try:
                 meta = json.loads(row["metadata"] or "{}")
                 node = meta.get("node") or self.bot.settings.proxmox_default_node
+                client = self.client(meta.get("cluster") or node)
                 if meta.get("provider") == "pterodactyl" and row["provider_id"]:
                     ptero = self.pterodactyl()
                     if ptero:
@@ -73,8 +73,8 @@ class LifecycleService:
         if not row:
             return False
         meta = json.loads(row["metadata"] or "{}")
-        client = self.client(meta.get("node"))
         node = meta.get("node") or self.bot.settings.proxmox_default_node
+        client = self.client(meta.get("cluster") or node)
         if meta.get("provider") == "pterodactyl" and row["provider_id"]:
             ptero = self.pterodactyl()
             if ptero:
