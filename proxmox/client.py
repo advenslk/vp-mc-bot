@@ -122,7 +122,6 @@ class ProxmoxClient:
         hostname: str,
         storage: str | None = None,
         full: bool = True,
-        password: str | None = None,
     ) -> Any:
         """Clone an LXC template as an independent full clone.
 
@@ -137,8 +136,6 @@ class ProxmoxClient:
         }
         if full and storage:
             params["storage"] = storage
-        if password:
-            params["password"] = password
         return await self.request(
             "POST", "nodes/%s/lxc/%s/clone" % (node, template_vmid), **params
         )
@@ -161,6 +158,14 @@ class ProxmoxClient:
             if asyncio.get_running_loop().time() >= deadline:
                 raise ProxmoxError("Proxmox task did not finish within %s seconds: %s" % (timeout_seconds, upid))
             await asyncio.sleep(poll_seconds)
+
+    async def set_container_password(self, node: str, vmid: int, password: str) -> Any:
+        """Set the LXC root password using Proxmox's dedicated passwd endpoint."""
+        return await self.request(
+            "POST",
+            "nodes/%s/lxc/%s/passwd" % (node, vmid),
+            password=password,
+        )
 
     async def clone_container_and_wait(
         self,
