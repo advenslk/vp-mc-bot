@@ -5,7 +5,7 @@ import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from proxmox.client import ProxmoxClient, ProxmoxConfig, ProxmoxError
+from proxmox.client import ProxmoxClient, ProxmoxConfig, ProxmoxError, ProxmoxConfigurationError
 from minecraft.client import PterodactylClient, PterodactylConfig, PterodactylError
 from core.components import provisioning_view
 
@@ -82,10 +82,21 @@ class ProvisioningService:
             "UPDATE provisioning_jobs SET status='running',attempts=attempts+1,started_at=CURRENT_TIMESTAMP WHERE id=? AND status='queued'",
             (job_id,),
         )
-        await self.db.execute("UPDATE redemptions SET status='provisioning' WHERE id=? AND status='pending'", (int(row["redemption_id"]),))
+        await self.db.execute("UPDATE redemptions SET status='provisioning' WHERE id=? AND status IN ('pending','provisioning')", (int(row["redemption_id"]),))
         await self.progress(job_id, str(row["plan_key"]), "Preparing", 10, "Provisioning worker started. Validating the selected provider and target.")
         try:
             await self.provision(client, row)
+        except ProxmoxConfigurationError as exc:
+            self.logger.warning("Provisioning job %s waiting for Proxmox configuration: %s", job_id, exc)
+            await self.db.execute(
+                "UPDATE provisioning_jobs SET status='queued',last_error=?,finished_at=NULL WHERE id=?",
+                (str(exc)[:1000], job_id),
+            )
+            await self.progress(
+                job_id, str(row["plan_key"]), "Waiting for Proxmox", 35,
+                str(exc)[:900], "provisioning",
+            )
+            return
         except Exception as exc:
             self.logger.exception("Provisioning job %s failed", job_id)
             await self.db.execute(
@@ -130,8 +141,6 @@ class ProvisioningService:
             available.sort(reverse=True)
             node_name = available[0][2]
 
-        await self.progress(job_id, plan_key, "Allocating resource", 35, "Node `%s` selected. Allocating the next available VMID." % node_name)
-        vmid = await client.next_vmid()
         hostname = "hx-%s-%s" % (str(row["plan_key"]).lower(), secrets.token_hex(3))
         try:
             metadata = json.loads(row["metadata"] or "{}")
@@ -140,8 +149,12 @@ class ProvisioningService:
         provider = str(metadata.get("provider", "lxc")).lower()
 
         if provider == "pterodactyl":
+            await self.progress(job_id, plan_key, "Creating Minecraft", 50, "Creating the Minecraft server in Pterodactyl.")
             await self.provision_minecraft(row, hostname)
             return
+
+        await self.progress(job_id, plan_key, "Allocating resource", 35, "Node selected. Allocating the next available VMID.")
+        vmid = await client.next_vmid()
 
         vps_username = "root"
         vps_password = secrets.token_urlsafe(15)
@@ -153,6 +166,35 @@ class ProvisioningService:
             await client.clone_container(
                 node_name, int(settings.proxmox_template_ctid), vmid, hostname, settings.proxmox_storage
             )
+            target_storage_gb = int(row["storage_gb"] or 0)
+            if target_storage_gb > 0:
+                rootfs = await client.container_config(node_name, vmid)
+                rootfs_value = str((rootfs or {}).get("rootfs") or "")
+                current_gb = None
+                for part in rootfs_value.split(","):
+                    part = part.strip()
+                    if part.startswith("size="):
+                        raw = part.split("=", 1)[1].strip().upper()
+                        try:
+                            if raw.endswith("T"):
+                                current_gb = float(raw[:-1]) * 1024
+                            elif raw.endswith("G"):
+                                current_gb = float(raw[:-1])
+                            elif raw.endswith("M"):
+                                current_gb = float(raw[:-1]) / 1024
+                        except ValueError:
+                            current_gb = None
+                        break
+                if current_gb is not None and current_gb > target_storage_gb:
+                    raise ProxmoxError(
+                        "LXC template rootfs is %.1f GB but plan %s requires %s GB. "
+                        "Proxmox cannot shrink an LXC rootfs during provisioning."
+                        % (current_gb, plan_key, target_storage_gb)
+                    )
+                if current_gb is None or current_gb < target_storage_gb:
+                    await client.resize_container(
+                        node_name, vmid, "rootfs", "%sG" % target_storage_gb
+                    )
             config = {
                 "memory": int(row["ram_mb"]),
                 "swap": max(256, int(row["ram_mb"]) // 2),
@@ -316,6 +358,12 @@ class ProvisioningService:
                 (provider_id, int(row["redemption_id"])),
             )
         user_obj = self.bot.get_user(int(row["user_id"]))
+        await self.progress(
+            int(row["id"]),
+            str(row["plan_key"]),
+            "Finalizing", 95,
+            "Minecraft server is ready. Preparing the final notification.",
+        )
         if user_obj:
             try:
                 await user_obj.send(
