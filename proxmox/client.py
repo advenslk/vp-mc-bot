@@ -58,10 +58,27 @@ class ProxmoxClient:
     async def create_container(self, node: str, vmid: int, config: dict[str, Any]) -> Any:
         return await self.request("POST", "nodes/%s/lxc" % node, vmid=vmid, **config)
 
-    async def clone_vm(self, node: str, template_vmid: int, newid: int, name: str, full: bool = True) -> Any:
+    async def clone_vm(self, node: str, template_vmid: int, newid: int, name: str, full: bool = True, storage: str | None = None) -> Any:
+        params = {"newid": newid, "name": name, "full": 1 if full else 0}
+        if storage:
+            params["storage"] = storage
+        return await self.request("POST", "nodes/%s/qemu/%s/clone" % (node, template_vmid), **params)
+
+    async def clone_container(self, node: str, template_vmid: int, newid: int, hostname: str, storage: str | None = None) -> Any:
+        params = {"newid": newid, "hostname": hostname}
+        if storage:
+            params["storage"] = storage
+        return await self.request("POST", "nodes/%s/lxc/%s/clone" % (node, template_vmid), **params)
+
+    async def set_container_config(self, node: str, vmid: int, config: dict[str, Any]) -> Any:
+        return await self.request("PUT", "nodes/%s/lxc/%s/config" % (node, vmid), **config)
+
+    async def container_status(self, node: str, vmid: int) -> Any:
+        return await self.request("GET", "nodes/%s/lxc/%s/status/current" % (node, vmid))
+
+    async def delete_container(self, node: str, vmid: int, purge: bool = True) -> Any:
         return await self.request(
-            "POST", "nodes/%s/qemu/%s/clone" % (node, template_vmid),
-            newid=newid, name=name, full=1 if full else 0,
+            "DELETE", "nodes/%s/lxc/%s" % (node, vmid), purge=1 if purge else 0
         )
 
     async def set_vm_config(self, node: str, vmid: int, config: dict[str, Any]) -> Any:
