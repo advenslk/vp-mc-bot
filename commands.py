@@ -305,6 +305,43 @@ class AdminCog(commands.Cog):
         await self.bot.db.execute("UPDATE proxmox_nodes SET enabled=? WHERE name=?", (enabled, name))
         await ctx.send(view=simple_view("# Node Status", "%s is now %s." % (name, "enabled" if enabled else "disabled")))
 
+    @commands.command(name="admin-node-health")
+    async def admin_node_health(self, ctx: commands.Context) -> None:
+        if not await self._owner(ctx):
+            await ctx.send(view=simple_view("# Permission Denied", "This command is restricted to bot owners.", discord.Colour.red()))
+            return
+        rows = await self.bot.db.fetchall("SELECT name,node_name,location,enabled FROM proxmox_nodes WHERE enabled=1 ORDER BY location,name")
+        if not rows:
+            await ctx.send(view=simple_view("# Node Health", "No enabled database nodes are configured."))
+            return
+        lines = []
+        from proxmox.client import client_from_settings
+        for row in rows:
+            client = client_from_settings(self.bot.settings, row["name"])
+            if not client:
+                lines.append("• **%s** — client not configured" % row["name"])
+                continue
+            try:
+                status = await client.node_status(str(row["node_name"]))
+                lines.append("• **%s** — online · CPU %.1f%% · RAM %.1f%%" % (
+                    row["name"], float(status.get("cpu", 0)) * 100,
+                    (float(status.get("memory", {}).get("used", 0)) / max(1, float(status.get("memory", {}).get("total", 1)))) * 100
+                ))
+                await self.bot.db.execute(
+                    "INSERT INTO node_health(node_id,status,free_memory_mb,total_memory_mb,cpu_load,last_checked_at,error) "
+                    "SELECT id,'online',?,?,?,CURRENT_TIMESTAMP,NULL FROM proxmox_nodes WHERE name=? "
+                    "ON CONFLICT(node_id) DO UPDATE SET status='online',free_memory_mb=excluded.free_memory_mb,"
+                    "total_memory_mb=excluded.total_memory_mb,cpu_load=excluded.cpu_load,last_checked_at=CURRENT_TIMESTAMP,error=NULL",
+                    (
+                        int(float(status.get("memory", {}).get("total", 0) - float(status.get("memory", {}).get("used", 0))) / 1048576),
+                        int(float(status.get("memory", {}).get("total", 0)) / 1048576),
+                        float(status.get("cpu", 0)), row["name"]
+                    ),
+                )
+            except Exception as exc:
+                lines.append("• **%s** — error: %s" % (row["name"], str(exc)[:120]))
+        await ctx.send(view=simple_view("# Proxmox Node Health", "\n".join(lines)))
+
     @commands.command(name="admin-nodes")
     async def admin_nodes(self, ctx: commands.Context) -> None:
         if not await self._owner(ctx):
