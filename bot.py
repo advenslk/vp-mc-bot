@@ -49,6 +49,7 @@ class HelzerXBot(commands.Bot):
         await self.load_extension("community_commands")
         await self.load_extension("vps_commands")
         self.voice_rewards.start()
+        self.provisioning_loop.change_interval(seconds=self.settings.provisioning_interval)
         self.provisioning_loop.start()
         self.lifecycle_loop.start()
 
