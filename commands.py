@@ -365,20 +365,43 @@ class AdminCog(commands.Cog):
             await ctx.send(view=simple_view("# Permission Denied", "This command is restricted to bot owners.", discord.Colour.red()))
             return
 
-        from proxmox.client import client_from_settings
+        from proxmox.client import ProxmoxClient, ProxmoxConfig, client_from_settings
 
         targets = []
         rows = await self.bot.db.fetchall(
-            "SELECT name,node_name,location,enabled FROM proxmox_nodes WHERE enabled=1 ORDER BY location,name"
+            "SELECT name,node_name,location,enabled,api_url,verify_ssl,token_id,token_secret FROM proxmox_nodes WHERE enabled=1 ORDER BY location,name"
         )
+        clusters = getattr(self.bot.settings, "proxmox_clusters", {}) or {}
         for row in rows:
+            cluster_name = str(row["name"])
+            client = None
+            if cluster_name in clusters:
+                client = client_from_settings(self.bot.settings, cluster_name)
+            elif row["token_id"] and row["token_secret"]:
+                client = ProxmoxClient(ProxmoxConfig(
+                    base_url=row["api_url"],
+                    token_id=row["token_id"],
+                    token_secret=row["token_secret"],
+                    verify_ssl=bool(row["verify_ssl"]),
+                ))
+            elif row["api_url"] and self.bot.settings.proxmox_token_id and self.bot.settings.proxmox_token_secret:
+                client = ProxmoxClient(ProxmoxConfig(
+                    base_url=row["api_url"],
+                    token_id=self.bot.settings.proxmox_token_id,
+                    token_secret=self.bot.settings.proxmox_token_secret,
+                    verify_ssl=bool(row["verify_ssl"]) if row["verify_ssl"] is not None else self.bot.settings.proxmox_verify_ssl,
+                ))
+            else:
+                client = client_from_settings(self.bot.settings, cluster_name)
+
             targets.append({
-                "name": row["name"], "node": row["node_name"], "location": row["location"],
-                "client": client_from_settings(self.bot.settings, row["name"]),
+                "name": cluster_name,
+                "node": row["node_name"],
+                "location": row["location"],
+                "client": client,
             })
 
         if not targets:
-            clusters = getattr(self.bot.settings, "proxmox_clusters", {}) or {}
             for name, cfg in clusters.items():
                 targets.append({
                     "name": str(name),
