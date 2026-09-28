@@ -101,6 +101,7 @@ class VPSCog(commands.Cog):
                 "INSERT INTO server_events(server_id,event_type,details) VALUES(?,?,?)",
                 (server_id, "power", json.dumps({"signal": mapping[action]})),
             )
+            await ctx.send(view=simple_view("# VPS Action Complete", "%s was requested for %s." % (action, row["hostname"])))
         else:
             client = self.client()
             node = self.bot.settings.proxmox_default_node
