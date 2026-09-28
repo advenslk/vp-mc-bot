@@ -78,48 +78,56 @@ class VPSCog(commands.Cog):
         if not row["vmid"] and not row["provider_id"]:
             await ctx.send(view=simple_view("# VPS Not Ready", "This resource is still provisioning.", discord.Colour.orange()))
             return
+
         try:
             metadata = json.loads(row["metadata"] or "{}")
         except (TypeError, ValueError):
             metadata = {}
-        if metadata.get("provider") == "pterodactyl":
-            ptero = self.bot.lifecycle.pterodactyl()
-            if not ptero:
-                await ctx.send(view=simple_view("# VPS Control Unavailable", "Pterodactyl control is not configured.", discord.Colour.orange()))
+
+        try:
+            if metadata.get("provider") == "pterodactyl":
+                ptero = self.bot.lifecycle.pterodactyl()
+                if not ptero:
+                    await ctx.send(view=simple_view("# VPS Control Unavailable", "Pterodactyl control is not configured.", discord.Colour.orange()))
+                    return
+                mapping = {"start": "start", "stop": "stop", "shutdown": "stop", "reboot": "restart"}
+                if action not in mapping:
+                    await ctx.send(view=simple_view("# Unsupported Action", "That action is not available for Minecraft resources.", discord.Colour.orange()))
+                    return
+                await ptero.power(str(row["provider_id"]), mapping[action])
+                state = "running" if action in {"start", "reboot"} else "stopped"
+                await self.bot.db.execute(
+                    "UPDATE vps_servers SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                    (state, server_id),
+                )
+                await self.bot.db.execute(
+                    "INSERT INTO server_events(server_id,event_type,details) VALUES(?,?,?)",
+                    (server_id, "power", json.dumps({"signal": mapping[action]})),
+                )
+                await ctx.send(view=simple_view("# VPS Action Complete", "%s was requested for %s." % (action, row["hostname"])))
                 return
-            mapping = {"start": "start", "stop": "stop", "shutdown": "stop", "reboot": "restart"}
-            if action not in mapping:
-                await ctx.send(view=simple_view("# Unsupported Action", "That action is not available for Minecraft resources.", discord.Colour.orange()))
+
+            client = self.client(metadata.get("cluster"))
+            node = metadata.get("node") or self.bot.settings.proxmox_default_node
+            if not client or not node:
+                await ctx.send(view=simple_view("# VPS Control Unavailable", "Proxmox control is not configured.", discord.Colour.orange()))
                 return
-            await ptero.power(str(row["provider_id"]), mapping[action])
-            state = "running" if action in {"start","reboot"} else "stopped"
+
+            if metadata.get("provider") == "lxc":
+                await client.container_action(node, int(row["vmid"]), action)
+            else:
+                await client.vm_action(node, int(row["vmid"]), action)
+
+            state = "running" if action == "start" else (
+                "stopped" if action in {"stop", "shutdown"} else action
+            )
             await self.bot.db.execute(
                 "UPDATE vps_servers SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
                 (state, server_id),
             )
             await self.bot.db.execute(
                 "INSERT INTO server_events(server_id,event_type,details) VALUES(?,?,?)",
-                (server_id, "power", json.dumps({"signal": mapping[action]})),
-            )
-            await ctx.send(view=simple_view("# VPS Action Complete", "%s was requested for %s." % (action, row["hostname"])))
-        else:
-            client = self.client()
-            node = self.bot.settings.proxmox_default_node
-            try:
-                node = metadata.get("node") or node
-            except (TypeError, ValueError):
-                pass
-            if not client or not node:
-                await ctx.send(view=simple_view("# VPS Control Unavailable", "Proxmox control is not configured.", discord.Colour.orange()))
-                return
-            if metadata.get("provider") == "lxc":
-                await client.container_action(node, int(row["vmid"]), action)
-            else:
-                await client.vm_action(node, int(row["vmid"]), action)
-            state = "running" if action == "start" else ("stopped" if action in {"stop", "shutdown"} else action)
-            await self.bot.db.execute(
-                "UPDATE vps_servers SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                (state, server_id),
+                (server_id, "power", json.dumps({"action": action})),
             )
             await ctx.send(view=simple_view("# VPS Action Complete", "%s was requested for %s." % (action, row["hostname"])))
         except ProxmoxError as exc:
