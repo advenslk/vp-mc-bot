@@ -47,6 +47,7 @@ class Settings:
     proxmox_storage: str | None
     proxmox_bridge: str
     proxmox_start: bool
+    proxmox_clusters: dict[str, dict[str, object]]
     provisioning_interval: int
     pterodactyl_url: str | None
     pterodactyl_api_key: str | None
@@ -66,6 +67,17 @@ def load_settings() -> Settings:
     token = os.getenv("DISCORD_TOKEN", "").strip()
     if not token:
         raise RuntimeError("DISCORD_TOKEN is missing. Copy .env.example to .env and configure it.")
+
+    import json
+    clusters = {}
+    raw_clusters = os.getenv("PROXMOX_CLUSTERS_JSON", "").strip()
+    if raw_clusters:
+        try:
+            parsed = json.loads(raw_clusters)
+            if isinstance(parsed, dict):
+                clusters = {str(k): v for k, v in parsed.items() if isinstance(v, dict)}
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("PROXMOX_CLUSTERS_JSON is not valid JSON.") from exc
 
     return Settings(
         token=token,
@@ -92,6 +104,7 @@ def load_settings() -> Settings:
         proxmox_storage=os.getenv("PROXMOX_STORAGE") or None,
         proxmox_bridge=os.getenv("PROXMOX_BRIDGE", "vmbr0"),
         proxmox_start=os.getenv("PROXMOX_START", "true").lower() in {"1", "true", "yes"},
+        proxmox_clusters=clusters,
         provisioning_interval=max(10, int(os.getenv("PROVISIONING_INTERVAL", "20"))),
         pterodactyl_url=os.getenv("PTERODACTYL_URL") or None,
         pterodactyl_api_key=os.getenv("PTERODACTYL_API_KEY") or None,
