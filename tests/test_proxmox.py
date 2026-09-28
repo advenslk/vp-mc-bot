@@ -40,6 +40,7 @@ def test_docker_compose_runtime_configuration():
     assert "apparmor=unconfined" in compose
     assert "security_opt:" in compose
     assert "user: root" in compose
+    assert 'host.docker.internal:host-gateway' in compose
 
 
 def test_database_initializes_and_writes(tmp_path):
