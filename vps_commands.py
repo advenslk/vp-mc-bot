@@ -13,16 +13,9 @@ class VPSCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    def client(self):
-        s = self.bot.settings
-        if not all((s.proxmox_api_url, s.proxmox_token_id, s.proxmox_token_secret)):
-            return None
-        return ProxmoxClient(ProxmoxConfig(
-            base_url=s.proxmox_api_url,
-            token_id=s.proxmox_token_id,
-            token_secret=s.proxmox_token_secret,
-            verify_ssl=s.proxmox_verify_ssl,
-        ))
+    def client(self, cluster_name=None):
+        from proxmox.client import client_from_settings
+        return client_from_settings(self.bot.settings, cluster_name)
 
     async def own_server(self, ctx, server_id: int):
         row = await self.bot.db.fetchone(
@@ -63,8 +56,8 @@ class VPSCog(commands.Cog):
             % (row["hostname"], row["plan_key"], row["vmid"] or "-", row["status"],
                row["ipv4"] or "Pending/DHCP", row["expires_at"] or "-")
         )
-        client = self.client()
         node = self.bot.settings.proxmox_default_node
+        client = self.client(node)
         try:
             node = json.loads(row["metadata"] or "{}").get("node") or node
         except (TypeError, ValueError):
