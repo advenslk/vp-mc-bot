@@ -85,6 +85,9 @@ class HelzerXBot(commands.Bot):
                        price_usd=excluded.price_usd,location=excluded.location,updated_at=CURRENT_TIMESTAMP""",
                     p,
                 )
+            await db.execute(
+                "UPDATE plans SET metadata='{"provider":"pterodactyl"}' WHERE kind='minecraft' AND (metadata='{}' OR metadata IS NULL)"
+            )
             achievements = [
                 ("first_profile", "First Profile", "Open your HelzerX profile.", 25),
                 ("first_daily", "Daily Start", "Claim your first daily reward.", 25),
