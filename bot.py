@@ -93,6 +93,13 @@ class HelzerXBot(commands.Bot):
                 "UPDATE plans SET metadata=? WHERE kind='minecraft' AND (metadata='{}' OR metadata IS NULL)",
                 ('{"provider":"pterodactyl"}',),
             )
+            # VPS plans are LXC-backed by default. This also repairs existing
+            # VPS plan rows that were seeded before provider metadata was added.
+            await db.execute(
+                "UPDATE plans SET metadata=? WHERE kind='vps' AND (metadata='{}' OR metadata IS NULL OR metadata='')",
+                ('{"provider":"lxc"}',),
+            )
+
             achievements = [
                 ("first_profile", "First Profile", "Open your HelzerX profile.", 25),
                 ("first_daily", "Daily Start", "Claim your first daily reward.", 25),
