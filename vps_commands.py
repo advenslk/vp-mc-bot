@@ -225,7 +225,7 @@ class VPSCog(commands.Cog):
             except ProxmoxError as exc:
                 await interaction.response.send_message("Password reset failed: %s" % str(exc), ephemeral=True)
                 return
-            panel = self.bot.settings.proxmox_public_url or self.bot.settings.proxmox_api_url or "Configured Proxmox endpoint"
+            panel = self.bot.settings.proxmox_public_url or "Proxmox panel URL is not configured"
             await interaction.response.send_message(
                 "## HelzerX Cloud — VPS Credentials\n"
                 "**Panel:** %s\n**Node:** `%s`\n**VMID:** `%s`\n\n"
