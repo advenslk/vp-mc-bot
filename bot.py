@@ -204,7 +204,8 @@ class HelzerXBot(commands.Bot):
                 self.settings.message_reward_cooldown, "message_activity",
             )
             await self.economy.update_quest(message.author.id, "daily_messages", 1)
-            await self.economy.unlock_achievement(message.author.id, "first_1000") if await self.economy.balance(message.author.id) >= 1000 else None
+            if await self.economy.balance(message.author.id) >= 1000:
+                await self.economy.unlock_achievement(message.author.id, "first_1000")
         await self.process_commands(message)
 
     @tasks.loop(minutes=1)
