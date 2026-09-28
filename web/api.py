@@ -9,10 +9,7 @@ from account.email import EmailService
 from account.service import AccountError, AccountService
 from core.database import Database
 from hosting.service import HostingService
-from config.settings import load_settings
-
-settings = load_settings()
-db = Database(settings.database_path)
+db = Database(os.getenv("DATABASE_PATH", "data/helzerx.db"))
 accounts = AccountService(db)
 hosting = HostingService(db, None)  # replaced after economy initialization
 app = FastAPI(title="HelzerX Cloud API", version="1.0.0")
