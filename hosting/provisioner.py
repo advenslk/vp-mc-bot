@@ -68,7 +68,7 @@ class ProvisioningService:
             plan_metadata = json.loads(row["metadata"] or "{}")
         except (TypeError, ValueError):
             plan_metadata = {}
-        provider = str(plan_metadata.get("provider", "qemu")).lower()
+        provider = str(plan_metadata.get("provider", "lxc")).lower()
         cluster_name = str(plan_metadata.get("cluster") or self.settings.proxmox_default_node or "") or None
         client = self.client(cluster_name)
         if provider == "pterodactyl":
@@ -137,7 +137,7 @@ class ProvisioningService:
             metadata = json.loads(row["metadata"] or "{}")
         except (TypeError, ValueError):
             metadata = {}
-        provider = str(metadata.get("provider", "qemu")).lower()
+        provider = str(metadata.get("provider", "lxc")).lower()
 
         if provider == "pterodactyl":
             await self.provision_minecraft(row, hostname)
