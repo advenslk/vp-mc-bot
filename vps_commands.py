@@ -57,11 +57,12 @@ class VPSCog(commands.Cog):
                row["ipv4"] or "Pending/DHCP", row["expires_at"] or "-")
         )
         node = self.bot.settings.proxmox_default_node
-        client = self.client(node)
         try:
-            node = json.loads(row["metadata"] or "{}").get("node") or node
+            metadata = json.loads(row["metadata"] or "{}")
         except (TypeError, ValueError):
-            pass
+            metadata = {}
+        node = metadata.get("node") or node
+        client = self.client(metadata.get("cluster") or node)
         if client and row["vmid"] and node:
             try:
                 status = await client.vm_status(node, int(row["vmid"]))
