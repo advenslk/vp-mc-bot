@@ -219,6 +219,7 @@ class ProvisioningService:
                 hostname,
                 settings.proxmox_storage,
                 full=True,
+                password=vps_password,
             )
             target_storage_gb = int(row["storage_gb"] or 0)
             if target_storage_gb > 0:
@@ -255,7 +256,6 @@ class ProvisioningService:
                 "hostname": hostname,
                 "onboot": 1,
                 "cores": int(row["cpu_units"]),
-                "password": vps_password,
             }
             if settings.proxmox_bridge:
                 config["net0"] = "name=eth0,bridge=%s,ip=dhcp" % settings.proxmox_bridge
@@ -266,7 +266,7 @@ class ProvisioningService:
             await self.progress(job_id, plan_key, "Creating VPS", 50, "Cloning the prepared VM template into VMID `%s`." % vmid)
             if not settings.proxmox_template_vmid:
                 raise ProxmoxError("PROXMOX_TEMPLATE_VMID is required for QEMU plans.")
-            await client.clone_vm(
+            await client.clone_vm_and_wait(
                 node_name, int(settings.proxmox_template_vmid), vmid, hostname, True, settings.proxmox_storage
             )
             config = {
