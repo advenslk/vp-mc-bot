@@ -13,6 +13,7 @@ from core.database import Database
 from economy.service import EconomyService
 from hosting.service import HostingService
 from hosting.provisioner import ProvisioningService
+from hosting.lifecycle import LifecycleService
 
 
 class HelzerXBot(commands.Bot):
@@ -34,6 +35,7 @@ class HelzerXBot(commands.Bot):
         self.economy = EconomyService(self.db)
         self.hosting = HostingService(self.db, self.economy)
         self.provisioner = ProvisioningService(self)
+        self.lifecycle = LifecycleService(self)
         self.invite_cache: dict[int, dict[str, int]] = {}
         self.voice_started: dict[int, datetime] = {}
         self.logger = logging.getLogger("helzerx")
@@ -48,6 +50,7 @@ class HelzerXBot(commands.Bot):
         await self.load_extension("vps_commands")
         self.voice_rewards.start()
         self.provisioning_loop.start()
+        self.lifecycle_loop.start()
 
     async def seed_defaults(self) -> None:
         plans = [
@@ -193,6 +196,17 @@ class HelzerXBot(commands.Bot):
             await self.economy.update_quest(message.author.id, "daily_messages", 1)
             await self.economy.unlock_achievement(message.author.id, "first_1000") if await self.economy.balance(message.author.id) >= 1000 else None
         await self.process_commands(message)
+
+    @tasks.loop(minutes=1)
+    async def lifecycle_loop(self) -> None:
+        try:
+            await self.lifecycle.expire_due()
+        except Exception:
+            self.logger.exception("Lifecycle loop error")
+
+    @lifecycle_loop.before_loop
+    async def before_lifecycle_loop(self) -> None:
+        await self.wait_until_ready()
 
     @tasks.loop(seconds=20)
     async def provisioning_loop(self) -> None:
