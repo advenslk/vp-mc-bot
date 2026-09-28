@@ -186,10 +186,12 @@ class HelzerXBot(commands.Bot):
             return
         await self.economy.ensure_user(message.author.id, str(message.author), message.author.display_name)
         if len(message.content.strip()) >= 4:
-            await self.economy.claim_cooldown_reward(
+            rewarded, _ = await self.economy.claim_cooldown_reward(
                 message.author.id, "message", self.settings.message_reward,
                 self.settings.message_reward_cooldown, "message_activity",
             )
+            await self.economy.update_quest(message.author.id, "daily_messages", 1)
+            await self.economy.unlock_achievement(message.author.id, "first_1000") if await self.economy.balance(message.author.id) >= 1000 else None
         await self.process_commands(message)
 
     @tasks.loop(seconds=20)
@@ -212,10 +214,12 @@ class HelzerXBot(commands.Bot):
                     continue
                 for member in members:
                     await self.economy.ensure_user(member.id, str(member), member.display_name)
-                    await self.economy.claim_cooldown_reward(
+                    rewarded, _ = await self.economy.claim_cooldown_reward(
                         member.id, "voice_10m", self.settings.voice_reward_per_10_min,
                         600, "voice_activity",
                     )
+                    if rewarded:
+                        await self.economy.update_quest(member.id, "daily_voice", 1)
 
     @voice_rewards.before_loop
     async def before_voice_rewards(self) -> None:
