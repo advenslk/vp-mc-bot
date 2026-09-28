@@ -204,13 +204,16 @@ class ProvisioningService:
         ))
         account = await self.db.fetchone("SELECT email FROM accounts WHERE user_id=? AND email_verified=1", (row["user_id"],))
         email = account["email"] if account else "discord-%s@helzerx.local" % row["user_id"]
-        user = await client.create_user(
-            "hx%s" % row["user_id"],
-            email,
-            "HelzerX",
-            "User",
-        )
-        ptero_user_id = int(user["object"] == "user" and user["attributes"]["id"] or user["id"])
+        user = await client.find_user(email)
+        if not user:
+            user = await client.create_user(
+                "hx%s" % row["user_id"],
+                email,
+                "HelzerX",
+                "User",
+            )
+        attrs_user = user.get("attributes", user)
+        ptero_user_id = int(attrs_user["id"])
         result = await client.create_server(
             hostname,
             ptero_user_id,
