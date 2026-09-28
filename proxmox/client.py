@@ -41,7 +41,7 @@ class ProxmoxClient:
         url = self._url(path)
         try:
             async with httpx.AsyncClient(verify=self.config.verify_ssl, timeout=timeout) as client:
-                response = await client.request(method, url, headers=self.headers, **kwargs)
+                response = await client.request(method, url, headers=self.headers, data=kwargs)
         except httpx.ConnectTimeout as exc:
             raise ProxmoxError(
                 "Could not connect to Proxmox API within 10 seconds: %s. "
