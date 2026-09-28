@@ -60,7 +60,8 @@ class ProvisioningService:
         except (TypeError, ValueError):
             plan_metadata = {}
         provider = str(plan_metadata.get("provider", "qemu")).lower()
-        client = self.client(self.settings.proxmox_default_node)
+        cluster_name = str(plan_metadata.get("cluster") or self.settings.proxmox_default_node or "") or None
+        client = self.client(cluster_name)
         if provider == "pterodactyl":
             if not all((self.settings.pterodactyl_url, self.settings.pterodactyl_api_key)):
                 return
@@ -88,7 +89,7 @@ class ProvisioningService:
 
     async def provision(self, client: ProxmoxClient, row) -> None:
         settings = self.settings
-        node_name = settings.proxmox_default_node
+        node_name = plan_metadata.get("node") or settings.proxmox_default_node
         if not node_name:
             nodes = await client.nodes()
             ram_need = int(row["ram_mb"]) * 1024 * 1024
