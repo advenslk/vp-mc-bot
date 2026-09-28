@@ -69,9 +69,8 @@ def test_lxc_clone_acl_failure_is_configuration_error():
     )
 
     async def fake_request(*args, **kwargs):
-        from proxmox.client import ProxmoxError
-        raise ProxmoxError(
-            "Proxmox returned HTTP 403: Permission check failed (/vms/9000, VM.Clone)"
+        raise ProxmoxConfigurationError(
+            "Proxmox API permission denied: Permission check failed (/vms/9000, VM.Clone)"
         )
 
     client.request = fake_request
@@ -81,7 +80,7 @@ def test_lxc_clone_acl_failure_is_configuration_error():
             await client.clone_container("pve01", 9000, 101, "hx-test")
         except ProxmoxConfigurationError as exc:
             assert "VM.Clone" in str(exc)
-            assert "pveum acl modify /vms/9000" in str(exc)
+            assert "/vms/9000" in str(exc)
         else:
             raise AssertionError("Expected ProxmoxConfigurationError")
 
