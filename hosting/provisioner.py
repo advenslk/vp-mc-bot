@@ -48,15 +48,23 @@ class ProvisioningService:
 
     async def run_once(self) -> None:
         await self.enqueue_pending()
-        client = self.client()
-        if client is None:
-            return
         row = await self.db.fetchone(
             "SELECT j.*,r.user_id,r.cost,p.plan_key,p.name,p.ram_mb,p.cpu_units,p.storage_gb,p.duration_days,p.metadata "
             "FROM provisioning_jobs j JOIN redemptions r ON r.id=j.redemption_id "
             "JOIN plans p ON p.id=r.plan_id WHERE j.status='queued' ORDER BY j.id LIMIT 1"
         )
         if not row:
+            return
+        try:
+            plan_metadata = json.loads(row["metadata"] or "{}")
+        except (TypeError, ValueError):
+            plan_metadata = {}
+        provider = str(plan_metadata.get("provider", "qemu")).lower()
+        client = self.client()
+        if provider == "pterodactyl":
+            if not all((self.settings.pterodactyl_url, self.settings.pterodactyl_api_key)):
+                return
+        elif client is None:
             return
 
         job_id = int(row["id"])
