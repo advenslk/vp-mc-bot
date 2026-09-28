@@ -54,6 +54,9 @@ async def health():
 
 @app.post("/auth/register")
 async def register(body: RegisterBody):
+    smtp = os.getenv("SMTP_HOST")
+    if not smtp:
+        raise HTTPException(503, "Email verification is not configured.")
     user_id = await accounts.consume_link_code(body.link_code)
     if not user_id:
         raise HTTPException(400, "Invalid or expired Discord link code.")
@@ -61,9 +64,6 @@ async def register(body: RegisterBody):
         token = await accounts.register(user_id, str(body.email), body.password)
     except AccountError as exc:
         raise HTTPException(400, str(exc))
-    smtp = os.getenv("SMTP_HOST")
-    if not smtp:
-        raise HTTPException(503, "Email verification is not configured.")
     if smtp:
         mail = EmailService(
             smtp, int(os.getenv("SMTP_PORT", "587")), os.getenv("SMTP_USERNAME", ""),
