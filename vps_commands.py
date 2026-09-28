@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import discord
 from discord.ext import commands
 
@@ -62,9 +64,14 @@ class VPSCog(commands.Cog):
                row["ipv4"] or "Pending/DHCP", row["expires_at"] or "-")
         )
         client = self.client()
-        if client and row["vmid"] and self.bot.settings.proxmox_default_node:
+        node = self.bot.settings.proxmox_default_node
+        try:
+            node = json.loads(row["metadata"] or "{}").get("node") or node
+        except (TypeError, ValueError):
+            pass
+        if client and row["vmid"] and node:
             try:
-                status = await client.vm_status(self.bot.settings.proxmox_default_node, int(row["vmid"]))
+                status = await client.vm_status(node, int(row["vmid"]))
                 body += "\n**Provider status:** %s" % status.get("status", "unknown")
             except Exception:
                 pass
@@ -79,6 +86,10 @@ class VPSCog(commands.Cog):
             return
         client = self.client()
         node = self.bot.settings.proxmox_default_node
+        try:
+            node = json.loads(row["metadata"] or "{}").get("node") or node
+        except (TypeError, ValueError):
+            pass
         if not client or not node:
             await ctx.send(view=simple_view("# VPS Control Unavailable", "Proxmox control is not configured.", discord.Colour.orange()))
             return
