@@ -237,7 +237,7 @@ class ProvisioningService:
                     "### Resources\n"
                     "• Plan: **%s**\n• RAM: **%s MB**\n• CPU: **%s cores**\n• Storage: **%s GB**\n\n"
                     "Keep this message private and change the password after your first login."
-                    % (hostname, settings.proxmox_public_url or settings.proxmox_api_url or "Configured Proxmox endpoint",
+                    % (hostname, settings.proxmox_public_url or "Proxmox panel URL is not configured",
                        node_name, vmid, vps_username, vps_password, hostname, row["plan_key"],
                        row["ram_mb"], row["cpu_units"], row["storage_gb"])
                 )
