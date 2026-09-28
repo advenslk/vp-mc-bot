@@ -26,7 +26,7 @@ class CommunityCog(commands.Cog):
             "%sadmin-plan-provider <plan> <qemu|lxc|pterodactyl> · %sadmin-node-add · %sadmin-node-toggle · %sadmin-nodes\n\n"
             "All reward accounting is recorded in the HZL transaction ledger."
         ) % (
-            p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p
+            p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p,p
         )
         await ctx.send(view=simple_view("# HelzerX Cloud Command Center", body))
 
