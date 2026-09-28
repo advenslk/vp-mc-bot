@@ -129,3 +129,20 @@ def test_next_vmid_skips_reserved_provisioning_ids():
 
     client.cluster_resources = fake_resources
     assert asyncio.run(client.next_vmid({102, 103})) == 104
+
+
+def test_wait_for_task_accepts_proxmox_warning(monkeypatch):
+    client = ProxmoxClient(
+        ProxmoxConfig(
+            base_url="https://pve.example:8006",
+            token_id="user@pam!bot",
+            token_secret="secret",
+        )
+    )
+
+    async def fake_request(method, path, **kwargs):
+        return {"status": "stopped", "exitstatus": "WARNINGS: 1"}
+
+    monkeypatch.setattr(client, "request", fake_request)
+    result = asyncio.run(client.wait_for_task("node1", "UPID:test"))
+    assert result["exitstatus"] == "WARNINGS: 1"
