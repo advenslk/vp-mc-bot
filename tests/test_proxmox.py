@@ -148,31 +148,6 @@ def test_wait_for_task_accepts_proxmox_warning(monkeypatch):
     assert result["exitstatus"] == "WARNINGS: 1"
 
 
-def test_lxc_clone_password_is_sent_to_clone_endpoint():
-    client = ProxmoxClient(
-        ProxmoxConfig(
-            base_url="https://pve.example:8006",
-            token_id="user@pam!bot",
-            token_secret="secret",
-        )
-    )
-    calls = []
-
-    async def fake_request(method, path, **kwargs):
-        calls.append((method, path, kwargs))
-        return {"data": "UPID:test"}
-
-    client.request = fake_request
-
-    async def run():
-        await client.clone_container(
-            "pve01", 9000, 101, "hx-test", "local", True, "Generated-Password-123!"
-        )
-        assert calls[0][2]["password"] == "Generated-Password-123!"
-
-    asyncio.run(run())
-
-
 def test_qemu_clone_and_wait_waits_for_task(monkeypatch):
     client = ProxmoxClient(
         ProxmoxConfig(
@@ -200,3 +175,32 @@ def test_qemu_clone_and_wait_waits_for_task(monkeypatch):
 
     assert result["data"] == "UPID:test"
     assert waited == [("pve01", "UPID:test")]
+
+
+def test_set_container_password_uses_dedicated_passwd_endpoint():
+    client = ProxmoxClient(
+        ProxmoxConfig(
+            base_url="https://pve.example:8006",
+            token_id="user@pam!bot",
+            token_secret="secret",
+        )
+    )
+    calls = []
+
+    async def fake_request(method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        return {"data": "UPID:test"}
+
+    client.request = fake_request
+    result = asyncio.run(
+        client.set_container_password("pve01", 101, "Generated-Password-123!")
+    )
+
+    assert result["data"] == "UPID:test"
+    assert calls == [
+        (
+            "POST",
+            "nodes/pve01/lxc/101/passwd",
+            {"password": "Generated-Password-123!"},
+        )
+    ]
