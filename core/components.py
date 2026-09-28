@@ -16,13 +16,13 @@ def wallet_view(
     view.add_item(discord.ui.TextDisplay("# %s HelzerX Wallet" % e("currency", "◈")))
     view.add_item(discord.ui.Separator())
     view.add_item(discord.ui.TextDisplay(
-        "### %s\\n"
-        "> **Balance:** `%s HZL`\\n"
+        "### %s\n"
+        "> **Balance:** `%s HZL`\n"
         "> **Verified Invites:** `%s`"
         % (display_name, format(balance, ","), invites)
     ))
     view.add_item(discord.ui.Separator())
-    view.add_item(discord.ui.TextDisplay("### Recent Activity\\n" + (recent or "No recent activity.")))
+    view.add_item(discord.ui.TextDisplay("### Recent Activity\n" + (recent or "No recent activity.")))
 
     row = discord.ui.ActionRow()
     transactions_button = discord.ui.Button(label="Transactions", custom_id="wallet:transactions", style=discord.ButtonStyle.secondary, emoji=e("money", "◈"))
@@ -30,13 +30,13 @@ def wallet_view(
 
     async def show_transactions(interaction: discord.Interaction) -> None:
         await interaction.response.send_message(
-            "### HZL Transaction History\\n" + (transactions_text or "No transactions yet."),
+            "### HZL Transaction History\n" + (transactions_text or "No transactions yet."),
             ephemeral=True,
         )
 
     async def show_rewards(interaction: discord.Interaction) -> None:
         await interaction.response.send_message(
-            "### HelzerX Rewards\\n" + (
+            "### HelzerX Rewards\n" + (
                 rewards_text
                 or "Earn HZL through daily rewards, eligible activity, verified invites, quests and achievements."
             ),
@@ -74,8 +74,8 @@ def plans_view(kind: str, plans: list) -> discord.ui.LayoutView:
     else:
         for index, p in enumerate(plans):
             body = (
-                "### %s · `%s`\\n"
-                "%s `%s GB`  %s `%s`  %s `%s GB`\\n"
+                "### %s · `%s`\n"
+                "%s `%s GB`  %s `%s`  %s `%s GB`\n"
                 "%s **%s HZL** · **$%.2f/month** · `%s`"
             ) % (
                 p["name"], p["plan_key"], e("ram", "RAM"), p["ram_mb"] // 1024,
