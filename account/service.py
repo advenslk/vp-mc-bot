@@ -73,6 +73,33 @@ class AccountService:
             await db.execute("UPDATE account_tokens SET used_at=CURRENT_TIMESTAMP WHERE id=?", (row["id"],))
             return True
 
+    async def create_session(self, user_id: int, days: int = 7) -> str:
+        raw = secrets.token_urlsafe(48)
+        expires = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+        account = await self.db.fetchone("SELECT id FROM accounts WHERE user_id=?", (user_id,))
+        if not account:
+            raise AccountError("Account not found.")
+        await self.db.execute(
+            "INSERT INTO account_tokens(account_id,token_hash,token_type,expires_at) VALUES(?,?,?,?,?)",
+            (int(account["id"]), self.token_hash(raw), "session", expires),
+        )
+        return raw
+
+    async def user_from_session(self, raw_token: str) -> int | None:
+        now = datetime.now(timezone.utc).isoformat()
+        row = await self.db.fetchone(
+            "SELECT a.user_id FROM account_tokens t JOIN accounts a ON a.id=t.account_id "
+            "WHERE t.token_hash=? AND t.token_type='session' AND t.used_at IS NULL AND t.expires_at>?",
+            (self.token_hash(raw_token), now),
+        )
+        return int(row["user_id"]) if row else None
+
+    async def revoke_session(self, raw_token: str) -> None:
+        await self.db.execute(
+            "UPDATE account_tokens SET used_at=CURRENT_TIMESTAMP WHERE token_hash=? AND token_type='session'",
+            (self.token_hash(raw_token),),
+        )
+
     async def authenticate(self, email: str, password: str) -> int:
         row = await self.db.fetchone(
             "SELECT id,user_id,password_hash,email_verified,locked FROM accounts WHERE email=?",
