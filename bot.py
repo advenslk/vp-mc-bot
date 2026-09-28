@@ -86,7 +86,8 @@ class HelzerXBot(commands.Bot):
                     p,
                 )
             await db.execute(
-                "UPDATE plans SET metadata='{"provider":"pterodactyl"}' WHERE kind='minecraft' AND (metadata='{}' OR metadata IS NULL)"
+                "UPDATE plans SET metadata=? WHERE kind='minecraft' AND (metadata='{}' OR metadata IS NULL)",
+                ('{"provider":"pterodactyl"}',),
             )
             achievements = [
                 ("first_profile", "First Profile", "Open your HelzerX profile.", 25),
