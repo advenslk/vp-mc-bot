@@ -364,36 +364,76 @@ class AdminCog(commands.Cog):
         if not await self._owner(ctx):
             await ctx.send(view=simple_view("# Permission Denied", "This command is restricted to bot owners.", discord.Colour.red()))
             return
-        rows = await self.bot.db.fetchall("SELECT name,node_name,location,enabled FROM proxmox_nodes WHERE enabled=1 ORDER BY location,name")
-        if not rows:
-            await ctx.send(view=simple_view("# Node Health", "No enabled database nodes are configured."))
-            return
-        lines = []
+
         from proxmox.client import client_from_settings
+
+        targets = []
+        rows = await self.bot.db.fetchall(
+            "SELECT name,node_name,location,enabled FROM proxmox_nodes WHERE enabled=1 ORDER BY location,name"
+        )
         for row in rows:
-            client = client_from_settings(self.bot.settings, row["name"])
+            targets.append({
+                "name": row["name"], "node": row["node_name"], "location": row["location"],
+                "client": client_from_settings(self.bot.settings, row["name"]),
+            })
+
+        if not targets:
+            clusters = getattr(self.bot.settings, "proxmox_clusters", {}) or {}
+            for name, cfg in clusters.items():
+                targets.append({
+                    "name": str(name),
+                    "node": cfg.get("node_name") or cfg.get("node") or self.bot.settings.proxmox_default_node,
+                    "location": str(cfg.get("location") or "configured cluster"),
+                    "client": client_from_settings(self.bot.settings, str(name)),
+                })
+            if not targets and self.bot.settings.proxmox_api_url:
+                targets.append({
+                    "name": "default",
+                    "node": self.bot.settings.proxmox_default_node,
+                    "location": "default cluster",
+                    "client": client_from_settings(self.bot.settings),
+                })
+
+        if not targets:
+            await ctx.send(view=simple_view(
+                "# Proxmox Node Health",
+                "No Proxmox connection is configured. Configure `PROXMOX_API_URL` + token credentials or `PROXMOX_CLUSTERS_JSON` first.",
+                discord.Colour.orange(),
+            ))
+            return
+
+        lines = []
+        for target in targets:
+            client = target["client"]
             if not client:
-                lines.append("• **%s** — client not configured" % row["name"])
+                lines.append("• **%s** — client credentials not configured" % target["name"])
                 continue
             try:
-                status = await client.node_status(str(row["node_name"]))
-                lines.append("• **%s** — online · CPU %.1f%% · RAM %.1f%%" % (
-                    row["name"], float(status.get("cpu", 0)) * 100,
-                    (float(status.get("memory", {}).get("used", 0)) / max(1, float(status.get("memory", {}).get("total", 1)))) * 100
-                ))
-                await self.bot.db.execute(
-                    "INSERT INTO node_health(node_id,status,free_memory_mb,total_memory_mb,cpu_load,last_checked_at,error) "
-                    "SELECT id,'online',?,?,?,CURRENT_TIMESTAMP,NULL FROM proxmox_nodes WHERE name=? "
-                    "ON CONFLICT(node_id) DO UPDATE SET status='online',free_memory_mb=excluded.free_memory_mb,"
-                    "total_memory_mb=excluded.total_memory_mb,cpu_load=excluded.cpu_load,last_checked_at=CURRENT_TIMESTAMP,error=NULL",
-                    (
-                        int(float(status.get("memory", {}).get("total", 0) - float(status.get("memory", {}).get("used", 0))) / 1048576),
-                        int(float(status.get("memory", {}).get("total", 0)) / 1048576),
-                        float(status.get("cpu", 0)), row["name"]
-                    ),
-                )
+                node_name = target["node"]
+                if not node_name:
+                    nodes = await client.nodes()
+                    online = [n for n in nodes if n.get("status") == "online"]
+                    if not online:
+                        lines.append("• **%s** — no online node detected" % target["name"])
+                        continue
+                    node_name = online[0]["node"]
+                status = await client.node_status(str(node_name))
+                memory = status.get("memory", {}) or {}
+                total = float(memory.get("total", 0))
+                used = float(memory.get("used", 0))
+                free_mb = int(max(0, total - used) / 1048576)
+                total_mb = int(total / 1048576)
+                cpu_pct = float(status.get("cpu", 0)) * 100
+                lines.append("• **%s** · `%s` · **ONLINE**\n  Location: `%s` · CPU: `%.1f%%` · RAM: `%s / %s MB free/total`" % (target["name"], node_name, target["location"], cpu_pct, free_mb, total_mb))
+                db_node = await self.bot.db.fetchone("SELECT id FROM proxmox_nodes WHERE name=? LIMIT 1", (target["name"],))
+                if db_node:
+                    await self.bot.db.execute(
+                        "INSERT INTO node_health(node_id,status,free_memory_mb,total_memory_mb,cpu_load,last_checked_at,error) VALUES(?,?,?,?,?,CURRENT_TIMESTAMP,NULL) ON CONFLICT(node_id) DO UPDATE SET status='online',free_memory_mb=excluded.free_memory_mb,total_memory_mb=excluded.total_memory_mb,cpu_load=excluded.cpu_load,last_checked_at=CURRENT_TIMESTAMP,error=NULL",
+                        (int(db_node["id"]), free_mb, total_mb, float(status.get("cpu", 0))),
+                    )
             except Exception as exc:
-                lines.append("• **%s** — error: %s" % (row["name"], str(exc)[:120]))
+                lines.append("• **%s** — **ERROR**: `%s`" % (target["name"], str(exc)[:180]))
+
         await ctx.send(view=simple_view("# Proxmox Node Health", "\n".join(lines)))
 
     @commands.command(name="admin-nodes")
