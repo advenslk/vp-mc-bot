@@ -60,7 +60,7 @@ class ProvisioningService:
         except (TypeError, ValueError):
             plan_metadata = {}
         provider = str(plan_metadata.get("provider", "qemu")).lower()
-        client = self.client()
+        client = self.client(self.settings.proxmox_default_node)
         if provider == "pterodactyl":
             if not all((self.settings.pterodactyl_url, self.settings.pterodactyl_api_key)):
                 return
