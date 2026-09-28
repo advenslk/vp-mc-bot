@@ -33,3 +33,9 @@ def test_next_vmid_uses_cluster_resources():
 
     client.cluster_resources = fake_resources
     assert asyncio.run(client.next_vmid()) == 104
+
+
+def test_docker_compose_allows_asyncio_socketpair():
+    compose = open("docker-compose.yml", encoding="utf-8").read()
+    assert "apparmor=unconfined" in compose
+    assert "security_opt:" in compose
