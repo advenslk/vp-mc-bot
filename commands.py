@@ -232,6 +232,66 @@ class AdminCog(commands.Cog):
         await ctx.send(view=simple_view("# Plan Status Updated", "%s is now %s." %
                                          (plan_key.upper(), "enabled" if enabled else "disabled")))
 
+    @commands.command(name="admin-plan-provider")
+    async def admin_plan_provider(self, ctx: commands.Context, plan_key: str, provider: str) -> None:
+        if not await self._owner(ctx):
+            await ctx.send(view=simple_view("# Permission Denied", "This command is restricted to bot owners.", discord.Colour.red()))
+            return
+        provider = provider.lower()
+        if provider not in {"qemu", "lxc"}:
+            await ctx.send(view=simple_view("# Invalid Provider", "Use qemu or lxc.", discord.Colour.orange()))
+            return
+        row = await self.bot.db.fetchone("SELECT metadata FROM plans WHERE plan_key=?", (plan_key.upper(),))
+        if not row:
+            await ctx.send(view=simple_view("# Plan Not Found", "Unknown plan key.", discord.Colour.orange()))
+            return
+        import json
+        try:
+            metadata = json.loads(row["metadata"] or "{}")
+        except (TypeError, ValueError):
+            metadata = {}
+        metadata["provider"] = provider
+        await self.bot.db.execute(
+            "UPDATE plans SET metadata=?,updated_at=CURRENT_TIMESTAMP WHERE plan_key=?",
+            (json.dumps(metadata, separators=(",", ":")), plan_key.upper()),
+        )
+        await ctx.send(view=simple_view("# Provider Updated", "%s now provisions using %s." % (plan_key.upper(), provider)))
+
+    @commands.command(name="admin-node-add")
+    async def admin_node_add(self, ctx: commands.Context, name: str, node_name: str, location: str, api_url: str) -> None:
+        if not await self._owner(ctx):
+            await ctx.send(view=simple_view("# Permission Denied", "This command is restricted to bot owners.", discord.Colour.red()))
+            return
+        await self.bot.db.execute(
+            """INSERT INTO proxmox_nodes(name,node_name,location,api_url)
+               VALUES(?,?,?,?)
+               ON CONFLICT(name) DO UPDATE SET node_name=excluded.node_name,
+               location=excluded.location,api_url=excluded.api_url,updated_at=CURRENT_TIMESTAMP""",
+            (name, node_name, location, api_url),
+        )
+        await ctx.send(view=simple_view("# Proxmox Node Saved", "%s · %s · %s" % (name, node_name, location)))
+
+    @commands.command(name="admin-node-toggle")
+    async def admin_node_toggle(self, ctx: commands.Context, name: str, enabled: int) -> None:
+        if not await self._owner(ctx):
+            await ctx.send(view=simple_view("# Permission Denied", "This command is restricted to bot owners.", discord.Colour.red()))
+            return
+        if enabled not in (0, 1):
+            await ctx.send(view=simple_view("# Invalid Value", "Use 1 to enable or 0 to disable.", discord.Colour.orange()))
+            return
+        await self.bot.db.execute("UPDATE proxmox_nodes SET enabled=? WHERE name=?", (enabled, name))
+        await ctx.send(view=simple_view("# Node Status", "%s is now %s." % (name, "enabled" if enabled else "disabled")))
+
+    @commands.command(name="admin-nodes")
+    async def admin_nodes(self, ctx: commands.Context) -> None:
+        if not await self._owner(ctx):
+            await ctx.send(view=simple_view("# Permission Denied", "This command is restricted to bot owners.", discord.Colour.red()))
+            return
+        rows = await self.bot.db.fetchall("SELECT name,node_name,location,api_url,enabled FROM proxmox_nodes ORDER BY location,name")
+        body = "\n".join("• **%s** · %s · %s · %s" % (r["name"],r["node_name"],r["location"],"enabled" if r["enabled"] else "disabled") for r in rows) or "No nodes configured."
+        await ctx.send(view=simple_view("# Proxmox Nodes", body))
+
+
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(EconomyCog(bot))
