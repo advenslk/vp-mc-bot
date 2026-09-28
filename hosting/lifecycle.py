@@ -37,7 +37,7 @@ class LifecycleService:
     async def expire_due(self) -> int:
         rows = await self.bot.db.fetchall(
             "SELECT id,vmid,kind,metadata FROM vps_servers "
-            "WHERE status='active' AND expires_at IS NOT NULL AND expires_at<=CURRENT_TIMESTAMP"
+            "WHERE status='active' AND expires_at IS NOT NULL AND datetime(expires_at)<=datetime('now')"
         )
         client = self.client()
         count = 0
