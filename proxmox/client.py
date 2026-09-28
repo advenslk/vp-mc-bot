@@ -30,7 +30,11 @@ class ProxmoxClient:
         self.headers = {"Authorization": "PVEAPIToken=%s=%s" % (config.token_id, config.token_secret)}
 
     def _url(self, path: str) -> str:
-        return self.config.base_url.rstrip("/") + "/api2/json/" + path.lstrip("/")
+        base = self.config.base_url.rstrip('/')
+        # Accept host URLs and URLs already ending in /api2/json.
+        if base.endswith('/api2/json'):
+            base = base[:-len('/api2/json')]
+        return base + '/api2/json/' + path.lstrip('/')
 
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
         timeout = kwargs.pop("timeout", httpx.Timeout(30.0, connect=10.0))
