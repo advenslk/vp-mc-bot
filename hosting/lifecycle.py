@@ -13,16 +13,9 @@ class LifecycleService:
         self.bot = bot
         self.logger = logging.getLogger("helzerx.lifecycle")
 
-    def client(self) -> ProxmoxClient | None:
-        s = self.bot.settings
-        if not all((s.proxmox_api_url, s.proxmox_token_id, s.proxmox_token_secret)):
-            return None
-        return ProxmoxClient(ProxmoxConfig(
-            base_url=s.proxmox_api_url,
-            token_id=s.proxmox_token_id,
-            token_secret=s.proxmox_token_secret,
-            verify_ssl=s.proxmox_verify_ssl,
-        ))
+    def client(self, cluster_name=None) -> ProxmoxClient | None:
+        from proxmox.client import client_from_settings
+        return client_from_settings(self.bot.settings, cluster_name)
 
     def pterodactyl(self) -> PterodactylClient | None:
         s = self.bot.settings
@@ -79,8 +72,8 @@ class LifecycleService:
         )
         if not row:
             return False
-        client = self.client()
         meta = json.loads(row["metadata"] or "{}")
+        client = self.client(meta.get("node"))
         node = meta.get("node") or self.bot.settings.proxmox_default_node
         if meta.get("provider") == "pterodactyl" and row["provider_id"]:
             ptero = self.pterodactyl()
