@@ -24,8 +24,32 @@ class EconomyCog(commands.Cog):
         balance = await self.economy.balance(ctx.author.id)
         invites = await self.economy.invite_count(ctx.guild.id, ctx.author.id)
         recent = await self.economy.recent_summary(ctx.author.id)
+        transactions = await self.economy.transactions(ctx.author.id, 8)
+        transaction_text = "\n".join(
+            "%s%s HZL · %s · %s" % (
+                "+" if row["amount"] >= 0 else "",
+                row["amount"],
+                row["source"],
+                row["transaction_type"],
+            )
+            for row in transactions
+        ) or "No transactions yet."
+        rewards_text = (
+            "• Daily check-in — configurable reward\n"
+            "• Eligible community activity — cooldown protected\n"
+            "• Verified Discord invites — anti-abuse checks\n"
+            "• Quests and achievements — database driven\n\n"
+            "HZL is an internal HelzerX reward currency with no cash value."
+        )
         await self.economy.unlock_achievement(ctx.author.id, "first_profile")
-        await ctx.send(view=wallet_view(ctx.author.display_name, balance, invites, recent))
+        await ctx.send(view=wallet_view(
+            ctx.author.display_name,
+            balance,
+            invites,
+            recent,
+            transaction_text,
+            rewards_text,
+        ))
 
     @commands.command(name="balance", aliases=("bal", "hzl"))
     async def balance(self, ctx: commands.Context) -> None:
