@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HelzerX Cloud</title>
+<style>
+:root{font-family:Inter,system-ui,sans-serif;color:#e9edf3;background:#0b0d10}
+body{margin:0;min-height:100vh;background:radial-gradient(circle at top,#18202b 0,#0b0d10 45%);padding:32px}
+main{max-width:980px;margin:auto}
+.card{background:#11151b;border:1px solid #252c35;border-radius:18px;padding:22px;margin:14px 0;box-shadow:0 16px 50px #0005}
+h1{margin:0 0 6px;font-size:34px}h2{margin-top:0}p{color:#aeb8c5}
+input,button{box-sizing:border-box;width:100%;padding:12px;border-radius:10px;border:1px solid #303844;background:#0d1116;color:#fff;margin:6px 0}
+button{cursor:pointer;background:#f2f4f7;color:#111;font-weight:700}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.plan{padding:16px;border:1px solid #2b333e;border-radius:14px;background:#0d1116}
+.small{font-size:13px;color:#8f9baa}
+pre{white-space:pre-wrap;color:#cbd5e1}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<main>
+<section class="card"><h1>HelzerX Cloud</h1><p>Infrastructure Built For Everyone</p></section>
+<section id="auth" class="card">
+<h2>Account</h2>
+<input id="email" placeholder="Email">
+<input id="password" type="password" placeholder="Password">
+<input id="link" placeholder="Discord link code (registration only)">
+<div class="grid"><button onclick="register()">Create account</button><button onclick="login()">Login</button></div>
+<p id="authmsg"></p>
+</section>
+<section id="dashboard" class="hidden">
+<div class="card"><h2>Dashboard</h2><button onclick="loadAll()">Refresh</button><button onclick="logout()">Logout</button><pre id="servers"></pre></div>
+<div class="card"><h2>Plans</h2><div id="plans" class="grid"></div></div>
+</section>
+</main>
+<script>
+let token=localStorage.getItem("hx_token")||"";
+const msg=t=>document.getElementById("authmsg").textContent=t;
+async function api(path,opt={}){opt.headers={...(opt.headers||{}),...(token?{Authorization:"Bearer "+token}:{})};if(opt.body){opt.headers["Content-Type"]="application/json"}const r=await fetch(path,opt);const j=await r.json();if(!r.ok)throw Error(j.detail||"Request failed");return j}
+async function register(){try{await api("/auth/register",{method:"POST",body:JSON.stringify({link_code:link.value,email:email.value,password:password.value})});msg("Verification email sent.")}catch(e){msg(e.message)}}
+async function login(){try{const j=await api("/auth/login",{method:"POST",body:JSON.stringify({email:email.value,password:password.value})});token=j.access_token;localStorage.setItem("hx_token",token);document.getElementById("auth").classList.add("hidden");document.getElementById("dashboard").classList.remove("hidden");await loadAll()}catch(e){msg(e.message)}}
+async function loadAll(){const s=await api("/servers");servers.textContent=JSON.stringify(s,null,2);const [v,m]=await Promise.all([api("/plans/vps"),api("/plans/minecraft")]);plans.innerHTML=[...v,...m].map(p=>'<div class="plan"><b>'+p.name+'</b><div class="small">'+p.plan_key+' · '+p.ram_mb+'MB · '+p.storage_gb+'GB</div><div>'+p.price_usd+' USD · '+p.hzl_cost+' HZL</div></div>').join("")}
+async function logout(){if(token)await api("/auth/logout",{method:"POST"});token="";localStorage.removeItem("hx_token");location.reload()}
+if(token){document.getElementById("auth").classList.add("hidden");document.getElementById("dashboard").classList.remove("hidden");loadAll().catch(()=>logout())}
+</script>
+</body>
+</html>
