@@ -330,7 +330,8 @@ class ProvisioningService:
                 user = None
         if user:
             try:
-                await user.send(
+                dm = user.dm_channel or await user.create_dm()
+                await dm.send(
                     "## HelzerX Cloud — VPS Ready\n"
                     "Your **%s** VPS has been provisioned successfully.\n\n"
                     "### Proxmox Access\n"
@@ -344,8 +345,11 @@ class ProvisioningService:
                        node_name, vmid, vps_username, vps_password, hostname, row["plan_key"],
                        row["ram_mb"], row["cpu_units"], row["storage_gb"])
                 )
-            except Exception:
-                self.logger.warning("Could not DM provisioning result to user %s", row["user_id"])
+            except Exception as exc:
+                self.logger.warning(
+                    "Could not DM provisioning result to user %s: %s: %s",
+                    row["user_id"], type(exc).__name__, exc, exc_info=True,
+                )
                 await self.progress(
                     job_id, plan_key, "Completed", 100,
                     "VPS is ready, but Discord could not deliver the private DM. Run .vps-password %s to securely generate a new VPS password." % server_id,
@@ -434,15 +438,19 @@ class ProvisioningService:
         )
         if user_obj:
             try:
-                await user_obj.send(
+                dm = user_obj.dm_channel or await user_obj.create_dm()
+                await dm.send(
                     "## HelzerX Cloud — Minecraft Server Provisioned\\n"
                     "Your **%s** server has been created.\\n\\n"
                     "• Plan: **%s**\\n• Memory: **%s MB**\\n• Storage: **%s GB**\\n"
                     "• CPU: **%s%%**\\n• Server ID: **%s**"
                     % (hostname,row["plan_key"],row["ram_mb"],row["storage_gb"],row["cpu_units"],provider_id)
                 )
-            except Exception:
-                self.logger.warning("Could not DM Minecraft provisioning result to user %s", row["user_id"])
+            except Exception as exc:
+                self.logger.warning(
+                    "Could not DM Minecraft provisioning result to user %s: %s: %s",
+                    row["user_id"], type(exc).__name__, exc, exc_info=True,
+                )
 
 
     async def plan_id(self, db, plan_key: str) -> int:
