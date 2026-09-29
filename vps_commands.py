@@ -8,6 +8,11 @@ from discord.ext import commands
 
 from core.components import simple_view
 from proxmox.client import ProxmoxConfig, ProxmoxClient, ProxmoxError
+from proxmox.host_exec import ProxmoxHostExecutionError, ProxmoxHostExecutor
+
+
+async def reset_lxc_password(settings, vmid: int, password: str) -> None:
+    await ProxmoxHostExecutor(settings).set_container_password(int(vmid), password)
 
 
 class VPSCog(commands.Cog):
@@ -209,20 +214,18 @@ class VPSCog(commands.Cog):
             if interaction.user.id != ctx.author.id:
                 await interaction.response.send_message("These credentials belong to another member.", ephemeral=True)
                 return
-            cluster = metadata.get("cluster")
             node = metadata.get("node") or self.bot.settings.proxmox_default_node
-            client = self.client(cluster)
-            if not client or not node:
-                await interaction.response.send_message("Proxmox control is not configured for this VPS.", ephemeral=True)
+            if not node:
+                await interaction.response.send_message("Proxmox node is not configured for this VPS.", ephemeral=True)
                 return
             new_password = secrets.token_urlsafe(15)
             try:
-                await client.set_container_config(node, int(row["vmid"]), {"password": new_password})
+                await reset_lxc_password(self.bot.settings, int(row["vmid"]), new_password)
                 await self.bot.db.execute(
                     "UPDATE vps_servers SET username=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
                     ("root", server_id),
                 )
-            except ProxmoxError as exc:
+            except ProxmoxHostExecutionError as exc:
                 await interaction.response.send_message("Password reset failed: %s" % str(exc), ephemeral=True)
                 return
             panel = self.bot.settings.proxmox_public_url or "Proxmox panel URL is not configured"
