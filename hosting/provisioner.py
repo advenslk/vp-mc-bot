@@ -18,7 +18,7 @@ from hosting.os_options import available_os_options
 VPS_PANEL_URL = "https://cvp.helzerx.cyou"
 
 
-def build_vps_credentials_view(hostname: str, vmid: int, node_name: str, username: str, password: str) -> discord.ui.LayoutView:
+def build_vps_credentials_view(hostname: str, vmid: int, node_name: str, username: str, password: str, panel_username: str, panel_password: str) -> discord.ui.LayoutView:
     view = discord.ui.LayoutView(timeout=600)
     container = discord.ui.Container()
     container.add_item(discord.ui.TextDisplay("# %s HelzerX Cloud — VPS Credentials" % e("brand", "◆")))
@@ -34,8 +34,17 @@ def build_vps_credentials_view(hostname: str, vmid: int, node_name: str, usernam
     ))
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay(
-        "### %s Login Credentials\n> **Username:** \`%s\`\n> **Password:** \`%s\`"
+        "### %s VPS Login Credentials\n"
+        "> **Username:** \\`%s\\`\n"
+        "> **Password:** \\`%s\\`"
         % (e("star", "★"), username, password)
+    ))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay(
+        "### %s Proxmox Panel Login\n"
+        "> **Username:** \\`%s\\`\n"
+        "> **Password:** \\`%s\\`"
+        % (e("support", "↗"), panel_username, panel_password)
     ))
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay("### %s Proxmox Panel\n%s" % (e("support", "↗"), VPS_PANEL_URL)))
@@ -122,6 +131,11 @@ class ProvisioningService:
             return
         vmid = int(job["vmid"])
         try:
+            panel_user = "hxvps%s" % vmid
+            try:
+                await ProxmoxHostExecutor(self.settings).delete_panel_user(panel_user)
+            except Exception:
+                self.logger.debug("Could not remove partial Proxmox panel user for VMID %s", vmid, exc_info=True)
             if provider == "lxc":
                 await client.delete_container(str(node), vmid, purge=True)
             elif provider != "pterodactyl":
@@ -262,6 +276,8 @@ class ProvisioningService:
 
         vps_username = "root"
         vps_password = secrets.token_urlsafe(15)
+        panel_username = "hxvps%s" % int(vmid)
+        panel_password = secrets.token_urlsafe(18)
         resource_started = False
 
         if provider == "lxc":
@@ -319,7 +335,10 @@ class ProvisioningService:
             await client.container_action(node_name, vmid, "start")
             resource_started = True
             await self.progress(job_id, plan_key, "Setting password", 78, "Setting the private root password inside the new LXC.")
-            await ProxmoxHostExecutor(settings).set_container_password(vmid, vps_password)
+            host_executor = ProxmoxHostExecutor(settings)
+            await host_executor.set_container_password(vmid, vps_password)
+            await self.progress(job_id, plan_key, "Creating panel account", 82, "Creating the private Proxmox panel account for this VPS.")
+            await host_executor.create_panel_user(vmid, panel_username, panel_password)
             if not settings.proxmox_start:
                 await client.container_action(node_name, vmid, "stop")
             kind = "vps"
@@ -356,7 +375,7 @@ class ProvisioningService:
                     int(node_id["id"]) if node_id else None, vmid, hostname, kind,
                     "active", os_label, (datetime.now(timezone.utc)+timedelta(days=int(row["duration_days"]))).isoformat(),
                     str(vmid), vps_username,
-                    json.dumps({"node": node_name, "cluster": cluster_name, "provider": provider}, separators=(",", ":")),
+                    json.dumps({"node": node_name, "cluster": cluster_name, "provider": provider, "panel_username": "%s@pve" % panel_username}, separators=(",", ":")),
                 ),
             )
             server_id = cur.lastrowid
@@ -387,7 +406,8 @@ class ProvisioningService:
                 dm = user.dm_channel or await user.create_dm()
                 await dm.send(
                     view=build_vps_credentials_view(
-                        hostname, int(vmid), str(node_name), vps_username, vps_password
+                        hostname, int(vmid), str(node_name), vps_username, vps_password,
+                        "%s@pve" % panel_username, panel_password,
                     )
                 )
             except Exception as exc:
