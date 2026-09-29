@@ -31,8 +31,11 @@ class ProvisioningService:
 
     async def enqueue_pending(self) -> None:
         rows = await self.db.fetchall(
-            "SELECT r.id FROM redemptions r LEFT JOIN provisioning_jobs j ON j.redemption_id=r.id "
-            "WHERE r.status='pending' AND j.id IS NULL ORDER BY r.id LIMIT 25"
+            "SELECT r.id FROM redemptions r JOIN plans p ON p.id=r.plan_id "
+            "LEFT JOIN provisioning_jobs j ON j.redemption_id=r.id "
+            "WHERE r.status='pending' AND j.id IS NULL "
+            "AND (p.kind != 'vps' OR r.os_key IS NOT NULL OR COALESCE(json_extract(p.metadata, '$.provider'), 'lxc') != 'lxc') "
+            "ORDER BY r.id LIMIT 25"
         )
         for row in rows:
             await self.db.execute(
@@ -100,7 +103,9 @@ class ProvisioningService:
         row = await self.db.fetchone(
             "SELECT j.*,r.user_id,r.cost,r.os_key,r.template_ctid,p.plan_key,p.name,p.kind,p.ram_mb,p.cpu_units,p.storage_gb,p.duration_days,p.metadata "
             "FROM provisioning_jobs j JOIN redemptions r ON r.id=j.redemption_id "
-            "JOIN plans p ON p.id=r.plan_id WHERE j.status='queued' ORDER BY j.id LIMIT 1"
+            "JOIN plans p ON p.id=r.plan_id WHERE j.status='queued' "
+            "AND (p.kind != 'vps' OR r.os_key IS NOT NULL OR COALESCE(json_extract(p.metadata, '$.provider'), 'lxc') != 'lxc') "
+            "ORDER BY j.id LIMIT 1"
         )
         if not row:
             return
@@ -188,6 +193,18 @@ class ProvisioningService:
         except (TypeError, ValueError):
             metadata = {}
         provider = str(metadata.get("provider", "lxc")).lower()
+        os_key = str(row["os_key"] or "").strip().lower()
+        template_ctid = int(row["template_ctid"]) if row["template_ctid"] is not None else settings.proxmox_template_ctid
+        os_labels = {
+            key: label
+            for key, label, _ctid in available_os_options({
+                "PROXMOX_TEMPLATE_CTID": str(settings.proxmox_template_ctid or ""),
+                "PROXMOX_UBUNTU_2204_TEMPLATE_CTID": str(settings.proxmox_ubuntu_2204_template_ctid or ""),
+                "PROXMOX_UBUNTU_2404_TEMPLATE_CTID": str(settings.proxmox_ubuntu_2404_template_ctid or ""),
+                "PROXMOX_ALMALINUX_9_TEMPLATE_CTID": str(settings.proxmox_almalinux_9_template_ctid or ""),
+            })
+        }
+        os_label = os_labels.get(os_key, "Configured template")
 
         if provider == "pterodactyl":
             await self.progress(job_id, plan_key, "Creating Minecraft", 50, "Creating the Minecraft server in Pterodactyl.")
@@ -212,8 +229,8 @@ class ProvisioningService:
 
         if provider == "lxc":
             await self.progress(job_id, plan_key, "Creating LXC", 50, "Cloning the prepared LXC template into VMID `%s`." % vmid)
-            if not settings.proxmox_template_ctid:
-                raise ProxmoxError("PROXMOX_TEMPLATE_CTID is required for LXC plans.")
+            if not template_ctid:
+                raise ProxmoxError("No LXC OS template is configured for the selected VPS OS.")
             await client.clone_container_and_wait(
                 node_name,
                 int(template_ctid),
