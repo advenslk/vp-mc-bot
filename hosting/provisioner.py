@@ -35,15 +35,15 @@ def build_vps_credentials_view(hostname: str, vmid: int, node_name: str, usernam
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay(
         "### %s VPS Login Credentials\n"
-        "> **Username:** \\`%s\\`\n"
-        "> **Password:** \\`%s\\`"
+        "> **Username:** `%s`\n"
+        "> **Password:** `%s`"
         % (e("star", "★"), username, password)
     ))
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay(
         "### %s Proxmox Panel Login\n"
-        "> **Username:** \\`%s\\`\n"
-        "> **Password:** \\`%s\\`"
+        "> **Username:** `%s`\n"
+        "> **Password:** `%s`"
         % (e("support", "↗"), panel_username, panel_password)
     ))
     container.add_item(discord.ui.Separator())
