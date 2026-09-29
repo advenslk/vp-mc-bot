@@ -80,6 +80,20 @@ class HostingRedemptionCog(commands.Cog):
         except (ValueError, EconomyError) as exc:
             await ctx.send(view=simple_view("# Redemption Unavailable", str(exc), discord.Colour.orange()))
             return
+        plan = await self.bot.db.fetchone("SELECT kind FROM plans WHERE plan_key=?", (plan_key.upper(),))
+        if plan and plan["kind"] == "vps":
+            options = available_os_options({
+                "PROXMOX_TEMPLATE_CTID": str(self.bot.settings.proxmox_template_ctid or ""),
+                "PROXMOX_UBUNTU_2204_TEMPLATE_CTID": str(self.bot.settings.proxmox_ubuntu_2204_template_ctid or ""),
+                "PROXMOX_UBUNTU_2404_TEMPLATE_CTID": str(self.bot.settings.proxmox_ubuntu_2404_template_ctid or ""),
+                "PROXMOX_ALMALINUX_9_TEMPLATE_CTID": str(self.bot.settings.proxmox_almalinux_9_template_ctid or ""),
+            })
+            if not options:
+                await self.bot.hosting.fail_and_refund(result.redemption_id, "No VPS operating system templates are configured.")
+                await ctx.send(view=simple_view("# Redemption Unavailable", "No VPS operating system templates are configured.", discord.Colour.orange()))
+                return
+            await ctx.send(view=VPSOSSelectionView(self.bot, ctx.author.id, result.redemption_id, plan_key.upper()))
+            return
         await self.bot.provisioner.enqueue_pending()
         job = await self.bot.db.fetchone(
             "SELECT id FROM provisioning_jobs WHERE redemption_id=? ORDER BY id DESC LIMIT 1",
