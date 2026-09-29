@@ -149,19 +149,5 @@ class ProxmoxHostExecutor:
     async def delete_panel_user(self, username: str) -> None:
         await asyncio.to_thread(self._delete_panel_user, username)
 
-    async def set_panel_password(self, username: str, password: str) -> None:
-        userid = username if "@" in username else "%s@pve" % username
-        command = "pveum user modify %s --enable 1; pveum passwd %s"
-        # pveum passwd is interactive, so use its supported command-line password
-        # option through the API-backed user-add path by recreating the account.
-        await asyncio.to_thread(self._set_panel_password, userid, password)
-
-    def _set_panel_password(self, userid: str, password: str) -> None:
-        quoted_user = shlex.quote(userid)
-        quoted_password = shlex.quote(password)
-        self._run("pveum user modify {user} --enable 1; pveum user delete {user}; pveum user add {user} --password {password}".format(
-            user=quoted_user, password=quoted_password
-        ))
-
     async def set_container_password(self, vmid: int, password: str) -> None:
         await asyncio.to_thread(self._connect_and_set_password, int(vmid), password)
