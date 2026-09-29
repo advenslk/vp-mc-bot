@@ -28,3 +28,17 @@ def test_resolve_os_template_rejects_unconfigured_os():
         assert "not configured" in str(exc)
     else:
         raise AssertionError("Expected unconfigured OS to be rejected")
+
+
+def test_database_migrates_vps_os_selection_columns(tmp_path):
+    import asyncio
+    from core.database import Database
+
+    async def run():
+        db = Database(str(tmp_path / "helzerx.db"))
+        await db.initialize()
+        rows = await db.fetchall("PRAGMA table_info(redemptions)")
+        names = {row["name"] for row in rows}
+        assert {"os_key", "template_ctid"}.issubset(names)
+
+    asyncio.run(run())
