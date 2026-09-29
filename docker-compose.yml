@@ -10,6 +10,7 @@ services:
       - .env
     volumes:
       - ./data:/app/data
+      - ./secrets:/run/secrets:ro
     # Linux Docker does not provide host.docker.internal automatically.
     # Proxmox is intentionally reached through the Docker host gateway.
     extra_hosts:
