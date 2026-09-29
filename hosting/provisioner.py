@@ -208,6 +208,7 @@ class ProvisioningService:
 
         vps_username = "root"
         vps_password = secrets.token_urlsafe(15)
+        resource_started = False
 
         if provider == "lxc":
             await self.progress(job_id, plan_key, "Creating LXC", 50, "Cloning the prepared LXC template into VMID `%s`." % vmid)
@@ -262,6 +263,7 @@ class ProvisioningService:
             await client.set_container_config(node_name, vmid, config)
             await self.progress(job_id, plan_key, "Applying resources", 70, "Applying RAM, CPU, hostname and network configuration.")
             await client.container_action(node_name, vmid, "start")
+            resource_started = True
             await self.progress(job_id, plan_key, "Setting password", 78, "Setting the private root password inside the new LXC.")
             await ProxmoxHostExecutor(settings).set_container_password(vmid, vps_password)
             if not settings.proxmox_start:
@@ -305,7 +307,7 @@ class ProvisioningService:
             )
             server_id = cur.lastrowid
         await self.progress(job_id, plan_key, "Starting VPS", 85, "Resource created successfully. Starting the VPS and waiting for finalization.")
-        if settings.proxmox_start:
+        if settings.proxmox_start and not resource_started:
             if provider == "lxc":
                 await client.container_action(node_name, vmid, "start")
             else:
