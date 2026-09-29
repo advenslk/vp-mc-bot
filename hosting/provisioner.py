@@ -50,7 +50,7 @@ def build_vps_credentials_view(hostname: str, vmid: int, node_name: str, usernam
     container.add_item(discord.ui.TextDisplay("### %s Proxmox Panel\n%s" % (e("support", "↗"), VPS_PANEL_URL)))
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay(
-        "%s **Security Notice**\nThis password is shown only to you. Do not share it publicly. Change the root password after your first login."
+        "%s **Security Notice**\nThese credentials are shown only to you. Do not share them publicly. The Proxmox account is restricted to this VPS only."
         % e("warning", "⚠")
     ))
     view.add_item(container)
