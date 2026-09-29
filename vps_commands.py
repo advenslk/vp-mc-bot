@@ -18,6 +18,10 @@ async def reset_lxc_password(settings, vmid: int, password: str) -> None:
     await ProxmoxHostExecutor(settings).set_container_password(int(vmid), password)
 
 
+async def reset_panel_password(settings, vmid: int, username: str, password: str) -> None:
+    await ProxmoxHostExecutor(settings).reset_panel_user(int(vmid), username, password)
+
+
 class VPSCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -222,8 +226,11 @@ class VPSCog(commands.Cog):
                 await interaction.response.send_message("Proxmox node is not configured for this VPS.", ephemeral=True)
                 return
             new_password = secrets.token_urlsafe(15)
+            panel_username = str(metadata.get("panel_username") or ("hxvps%s@pve" % int(row["vmid"])))
+            panel_password = secrets.token_urlsafe(18)
             try:
                 await reset_lxc_password(self.bot.settings, int(row["vmid"]), new_password)
+                await reset_panel_password(self.bot.settings, int(row["vmid"]), panel_username, panel_password)
                 await self.bot.db.execute(
                     "UPDATE vps_servers SET username=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
                     ("root", server_id),
@@ -253,21 +260,24 @@ class VPSCog(commands.Cog):
             ))
             credential_container.add_item(discord.ui.Separator())
             credential_container.add_item(discord.ui.TextDisplay(
-                "### %s Login Credentials\n"
+                "### %s VPS Login Credentials\n"
                 "> **Username:** `root`\n"
                 "> **Password:** `%s`"
                 % (e("star", "★"), new_password)
             ))
             credential_container.add_item(discord.ui.Separator())
             credential_container.add_item(discord.ui.TextDisplay(
-                "### %s Proxmox Panel\n%s"
-                % (e("support", "↗"), panel)
+                "### %s Proxmox Panel Login\n"
+                "> **Username:** `%s`\n"
+                "> **Password:** `%s`\n\n"
+                "%s"
+                % (e("support", "↗"), panel_username, panel_password, panel)
             ))
             credential_container.add_item(discord.ui.Separator())
             credential_container.add_item(discord.ui.TextDisplay(
                 "%s **Security Notice**\n"
-                "This password is shown only to you. Do not share it publicly. "
-                "Change the root password after your first login."
+                "These credentials are shown only to you. Do not share them publicly. "
+                "The Proxmox account is restricted to this VPS only."
                 % e("warning", "⚠")
             ))
             credential_view.add_item(credential_container)
