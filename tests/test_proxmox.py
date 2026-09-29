@@ -294,7 +294,7 @@ def test_set_container_config_retries_transient_lock():
             raise RuntimeError("Proxmox returned HTTP 500: can't lock file '/run/lock/lxc/pve-config-9019.lock' - got timeout")
         return {"data": None}
 
-    client.request = fake_request
+    client._request_once = fake_request
     result = asyncio.run(
         client.set_container_config("pve01", 9019, {"memory": 512})
     )
