@@ -8,7 +8,8 @@ from datetime import datetime, timedelta, timezone
 from proxmox.client import ProxmoxClient, ProxmoxConfig, ProxmoxError, ProxmoxConfigurationError
 from proxmox.host_exec import ProxmoxHostExecutor
 from minecraft.client import PterodactylClient, PterodactylConfig, PterodactylError
-from core.components import provisioning_view\nfrom hosting.os_options import available_os_options
+from core.components import provisioning_view
+from hosting.os_options import available_os_options
 
 
 class ProvisioningService:
