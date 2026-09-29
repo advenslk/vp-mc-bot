@@ -44,6 +44,23 @@ class ProxmoxClient:
         return base + '/api2/json/' + path.lstrip('/')
 
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
+        """Request Proxmox with bounded retries for transient resource locks."""
+        attempts = 5
+        for attempt in range(attempts):
+            try:
+                return await self._request_once(method, path, **kwargs)
+            except ProxmoxError as exc:
+                message = str(exc).lower()
+                retryable_lock = (
+                    "can't lock file" in message
+                    and ("got timeout" in message or "lock timeout" in message)
+                )
+                if not retryable_lock or attempt >= attempts - 1:
+                    raise
+                delay = min(4.0, 1.0 + attempt)
+                await asyncio.sleep(delay)
+
+    async def _request_once(self, method: str, path: str, **kwargs: Any) -> Any:
         timeout = kwargs.pop("timeout", httpx.Timeout(30.0, connect=10.0))
         url = self._url(path)
         try:
