@@ -3,13 +3,49 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+
+import discord
 from datetime import datetime, timedelta, timezone
 
 from proxmox.client import ProxmoxClient, ProxmoxConfig, ProxmoxError, ProxmoxConfigurationError
 from proxmox.host_exec import ProxmoxHostExecutor
 from minecraft.client import PterodactylClient, PterodactylConfig, PterodactylError
 from core.components import provisioning_view
+from config.emoji import e
 from hosting.os_options import available_os_options
+
+
+VPS_PANEL_URL = "https://cvp.helzerx.cyou"
+
+
+def build_vps_credentials_view(hostname: str, vmid: int, node_name: str, username: str, password: str) -> discord.ui.LayoutView:
+    view = discord.ui.LayoutView(timeout=600)
+    container = discord.ui.Container()
+    container.add_item(discord.ui.TextDisplay("# %s HelzerX Cloud — VPS Credentials" % e("brand", "◆")))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay(
+        "### %s VPS Ready\\nYour VPS has been provisioned successfully. Keep these credentials private."
+        % e("node", "▣")
+    ))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay(
+        "### %s Connection Details\\n> **Hostname:** \`%s\`\\n> **VMID:** \`%s\`\\n> **Node:** \`%s\`"
+        % (e("code", "▣"), hostname, vmid, node_name)
+    ))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay(
+        "### %s Login Credentials\\n> **Username:** \`%s\`\\n> **Password:** \`%s\`"
+        % (e("star", "★"), username, password)
+    ))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay("### %s Proxmox Panel\\n%s" % (e("support", "↗"), VPS_PANEL_URL)))
+    container.add_item(discord.ui.Separator())
+    container.add_item(discord.ui.TextDisplay(
+        "%s **Security Notice**\\nThis password is shown only to you. Do not share it publicly. Change the root password after your first login."
+        % e("warning", "⚠")
+    ))
+    view.add_item(container)
+    return view
 
 
 class ProvisioningService:
@@ -350,18 +386,9 @@ class ProvisioningService:
             try:
                 dm = user.dm_channel or await user.create_dm()
                 await dm.send(
-                    "## HelzerX Cloud — VPS Ready\n"
-                    "Your **%s** VPS has been provisioned successfully.\n\n"
-                    "### Proxmox Access\n"
-                    "• Panel: **%s**\n• Node: **%s**\n• VMID: **%s**\n\n"
-                    "### VPS Login\n"
-                    "• Username: `%s`\n• Password: `%s`\n• Hostname: `%s`\n\n"
-                    "### Resources\n"
-                    "• Plan: **%s**\n• RAM: **%s MB**\n• CPU: **%s cores**\n• Storage: **%s GB**\n\n"
-                    "Keep this message private and change the password after your first login."
-                    % (hostname, settings.proxmox_public_url or "Proxmox panel URL is not configured",
-                       node_name, vmid, vps_username, vps_password, hostname, row["plan_key"],
-                       row["ram_mb"], row["cpu_units"], row["storage_gb"])
+                    view=build_vps_credentials_view(
+                        hostname, int(vmid), str(node_name), vps_username, vps_password
+                    )
                 )
             except Exception as exc:
                 self.logger.warning(
