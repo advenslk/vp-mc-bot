@@ -159,18 +159,6 @@ class ProxmoxClient:
                 raise ProxmoxError("Proxmox task did not finish within %s seconds: %s" % (timeout_seconds, upid))
             await asyncio.sleep(poll_seconds)
 
-    async def set_container_password(self, node: str, vmid: int, password: str) -> Any:
-        """Set the LXC root password and wait for the Proxmox task to finish."""
-        result = await self.request(
-            "POST",
-            "nodes/%s/lxc/%s/passwd" % (node, vmid),
-            password=password,
-        )
-        upid = result.get("data") if isinstance(result, dict) else result
-        if upid:
-            await self.wait_for_task(node, str(upid))
-        return result
-
     async def clone_container_and_wait(
         self,
         node: str,
