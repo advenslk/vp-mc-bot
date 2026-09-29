@@ -146,6 +146,10 @@ class ProxmoxHostExecutor:
     async def create_panel_user(self, vmid: int, username: str, password: str) -> None:
         await asyncio.to_thread(self._create_panel_user, int(vmid), username, password)
 
+    async def reset_panel_user(self, vmid: int, username: str, password: str) -> None:
+        # Recreate the deterministic per-VPS account and reapply its VM-only ACL.
+        await asyncio.to_thread(self._create_panel_user, int(vmid), username, password)
+
     async def delete_panel_user(self, username: str) -> None:
         await asyncio.to_thread(self._delete_panel_user, username)
 
