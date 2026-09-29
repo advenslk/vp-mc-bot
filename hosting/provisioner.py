@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from proxmox.client import ProxmoxClient, ProxmoxConfig, ProxmoxError, ProxmoxConfigurationError
 from proxmox.host_exec import ProxmoxHostExecutor
 from minecraft.client import PterodactylClient, PterodactylConfig, PterodactylError
-from core.components import provisioning_view
+from core.components import provisioning_view\nfrom hosting.os_options import available_os_options
 
 
 class ProvisioningService:
@@ -98,7 +98,7 @@ class ProvisioningService:
         await self.recover_interrupted_jobs()
         await self.enqueue_pending()
         row = await self.db.fetchone(
-            "SELECT j.*,r.user_id,r.cost,p.plan_key,p.name,p.ram_mb,p.cpu_units,p.storage_gb,p.duration_days,p.metadata "
+            "SELECT j.*,r.user_id,r.cost,r.os_key,r.template_ctid,p.plan_key,p.name,p.kind,p.ram_mb,p.cpu_units,p.storage_gb,p.duration_days,p.metadata "
             "FROM provisioning_jobs j JOIN redemptions r ON r.id=j.redemption_id "
             "JOIN plans p ON p.id=r.plan_id WHERE j.status='queued' ORDER BY j.id LIMIT 1"
         )
@@ -216,7 +216,7 @@ class ProvisioningService:
                 raise ProxmoxError("PROXMOX_TEMPLATE_CTID is required for LXC plans.")
             await client.clone_container_and_wait(
                 node_name,
-                int(settings.proxmox_template_ctid),
+                int(template_ctid),
                 vmid,
                 hostname,
                 settings.proxmox_storage,
@@ -300,7 +300,7 @@ class ProvisioningService:
                 (
                     int(row["user_id"]), await self.plan_id(db, str(row["plan_key"])),
                     int(node_id["id"]) if node_id else None, vmid, hostname, kind,
-                    "active", "template", (datetime.now(timezone.utc)+timedelta(days=int(row["duration_days"]))).isoformat(),
+                    "active", os_label, (datetime.now(timezone.utc)+timedelta(days=int(row["duration_days"]))).isoformat(),
                     str(vmid), vps_username,
                     json.dumps({"node": node_name, "cluster": cluster_name, "provider": provider}, separators=(",", ":")),
                 ),
