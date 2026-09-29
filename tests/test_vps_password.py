@@ -69,3 +69,31 @@ def test_create_panel_user_scopes_acl_to_vmid(monkeypatch):
     assert "hxvps9023@pve" in command
     assert "/vms/9023" in command
     assert "PVEVMAdmin" in command
+
+
+def test_reset_panel_password_recreates_scoped_user(monkeypatch):
+    calls = []
+
+    class FakeExecutor:
+        def __init__(self, settings):
+            calls.append(("init", settings))
+
+        async def reset_panel_user(self, vmid, username, password):
+            calls.append(("reset", vmid, username, password))
+
+    settings = object()
+    monkeypatch.setattr(vps_commands, "ProxmoxHostExecutor", FakeExecutor)
+
+    asyncio.run(
+        vps_commands.reset_panel_password(
+            settings,
+            9023,
+            "hxvps9023@pve",
+            "Panel-Secret-123!",
+        )
+    )
+
+    assert calls == [
+        ("init", settings),
+        ("reset", 9023, "hxvps9023@pve", "Panel-Secret-123!"),
+    ]
