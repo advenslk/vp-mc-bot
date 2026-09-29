@@ -11,19 +11,11 @@ from core.components import simple_view
 from proxmox.client import ProxmoxConfig, ProxmoxClient, ProxmoxError
 from proxmox.host_exec import ProxmoxHostExecutionError, ProxmoxHostExecutor
 
+VPS_PANEL_URL = "https://cvp.helzerx.cyou"
+
 
 async def reset_lxc_password(settings, vmid: int, password: str) -> None:
     await ProxmoxHostExecutor(settings).set_container_password(int(vmid), password)
-
-
-async def deliver_private_credentials(interaction: discord.Interaction, view: discord.ui.LayoutView) -> str:
-    """Deliver credentials privately, falling back to an ephemeral interaction response."""
-    try:
-        await interaction.user.send(view=view)
-        return "dm"
-    except discord.Forbidden:
-        await interaction.response.send_message(view=view, ephemeral=True)
-        return "ephemeral"
 
 
 class VPSCog(commands.Cog):
@@ -239,7 +231,7 @@ class VPSCog(commands.Cog):
             except ProxmoxHostExecutionError as exc:
                 await interaction.response.send_message("Password reset failed: %s" % str(exc), ephemeral=True)
                 return
-            panel = self.bot.settings.proxmox_public_url or "Proxmox panel URL is not configured"
+            panel = VPS_PANEL_URL
             credential_view = discord.ui.LayoutView(timeout=600)
             credential_container = discord.ui.Container()
             credential_container.add_item(discord.ui.TextDisplay(
@@ -280,13 +272,16 @@ class VPSCog(commands.Cog):
             ))
             credential_view.add_item(credential_container)
 
-            delivery = await deliver_private_credentials(interaction, credential_view)
-            if delivery == "dm":
-                await interaction.response.send_message(
-                    "%s Your VPS credentials were sent to your DMs."
-                    % e("brand", "◆"),
-                    ephemeral=True,
-                )
+            try:
+                await interaction.user.send(view=credential_view)
+            except discord.Forbidden:
+                await interaction.response.send_message(view=credential_view, ephemeral=True)
+                return
+            await interaction.response.send_message(
+                "%s Your VPS credentials were sent to your DMs."
+                % e("brand", "◆"),
+                ephemeral=True,
+            )
 
         button.callback = generate
         action_row.add_item(button)
