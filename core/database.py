@@ -147,6 +147,8 @@ CREATE TABLE IF NOT EXISTS redemptions (
     status TEXT NOT NULL,
     provider_resource_id TEXT,
     failure_reason TEXT,
+    os_key TEXT,
+    template_ctid INTEGER,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at TEXT
 );
@@ -322,6 +324,19 @@ class Database:
                 if name not in existing:
                     await db.execute(
                         "ALTER TABLE provisioning_jobs ADD COLUMN %s %s" % (name, definition)
+                    )
+            redemption_columns = {
+                "os_key": "TEXT",
+                "template_ctid": "INTEGER",
+            }
+            redemption_existing = {
+                row["name"]
+                for row in await (await db.execute("PRAGMA table_info(redemptions)")).fetchall()
+            }
+            for name, definition in redemption_columns.items():
+                if name not in redemption_existing:
+                    await db.execute(
+                        "ALTER TABLE redemptions ADD COLUMN %s %s" % (name, definition)
                     )
             await db.commit()
         finally:
