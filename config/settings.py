@@ -48,6 +48,13 @@ class Settings:
     proxmox_storage: str | None
     proxmox_bridge: str
     proxmox_start: bool
+    proxmox_ssh_host: str | None
+    proxmox_ssh_port: int
+    proxmox_ssh_user: str
+    proxmox_ssh_key_file: str | None
+    proxmox_ssh_password: str | None
+    proxmox_ssh_known_hosts: str | None
+    proxmox_ssh_strict_host_key: bool
     proxmox_clusters: dict[str, dict[str, object]]
     provisioning_interval: int
     pterodactyl_url: str | None
@@ -106,6 +113,13 @@ def load_settings() -> Settings:
         proxmox_storage=os.getenv("PROXMOX_STORAGE") or None,
         proxmox_bridge=os.getenv("PROXMOX_BRIDGE", "vmbr0"),
         proxmox_start=os.getenv("PROXMOX_START", "true").lower() in {"1", "true", "yes"},
+        proxmox_ssh_host=os.getenv("PROXMOX_SSH_HOST") or None,
+        proxmox_ssh_port=max(1, int(os.getenv("PROXMOX_SSH_PORT", "22"))),
+        proxmox_ssh_user=os.getenv("PROXMOX_SSH_USER", "root"),
+        proxmox_ssh_key_file=os.getenv("PROXMOX_SSH_KEY_FILE") or None,
+        proxmox_ssh_password=os.getenv("PROXMOX_SSH_PASSWORD") or None,
+        proxmox_ssh_known_hosts=os.getenv("PROXMOX_SSH_KNOWN_HOSTS") or None,
+        proxmox_ssh_strict_host_key=os.getenv("PROXMOX_SSH_STRICT_HOST_KEY", "true").lower() in {"1", "true", "yes"},
         proxmox_clusters=clusters,
         provisioning_interval=max(10, int(os.getenv("PROVISIONING_INTERVAL", "20"))),
         pterodactyl_url=os.getenv("PTERODACTYL_URL") or None,
