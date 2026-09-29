@@ -22,6 +22,16 @@ async def reset_panel_password(settings, vmid: int, username: str, password: str
     await ProxmoxHostExecutor(settings).reset_panel_user(int(vmid), username, password)
 
 
+
+async def deliver_private_credentials(interaction: discord.Interaction, view: discord.ui.LayoutView) -> str:
+    try:
+        await interaction.user.send(view=view)
+    except discord.Forbidden:
+        await interaction.response.send_message(view=view, ephemeral=True)
+        return "ephemeral"
+    return "dm"
+
+
 class VPSCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -282,10 +292,8 @@ class VPSCog(commands.Cog):
             ))
             credential_view.add_item(credential_container)
 
-            try:
-                await interaction.user.send(view=credential_view)
-            except discord.Forbidden:
-                await interaction.response.send_message(view=credential_view, ephemeral=True)
+            delivery = await deliver_private_credentials(interaction, credential_view)
+            if delivery == "ephemeral":
                 return
             await interaction.response.send_message(
                 "%s Your VPS credentials were sent to your DMs."
