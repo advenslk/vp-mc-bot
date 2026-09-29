@@ -207,3 +207,72 @@ def test_lxc_clone_and_wait_does_not_pass_password_to_clone(monkeypatch):
     ]
 
 
+
+
+def test_proxmox_host_executor_writes_password_to_stdin(monkeypatch):
+    from types import SimpleNamespace
+    from proxmox.host_exec import ProxmoxHostExecutor
+
+    class FakeChannel:
+        def shutdown_write(self):
+            pass
+
+        def recv_exit_status(self):
+            return 0
+
+    class FakeStream:
+        def __init__(self):
+            self.channel = FakeChannel()
+
+        def read(self):
+            return b""
+
+    class FakeStdin:
+        def __init__(self):
+            self.writes = []
+            self.channel = FakeChannel()
+
+        def write(self, value):
+            self.writes.append(value)
+
+        def flush(self):
+            pass
+
+    class FakeClient:
+        instance = None
+
+        def __init__(self):
+            FakeClient.instance = self
+            self.stdin = FakeStdin()
+
+        def load_system_host_keys(self):
+            pass
+
+        def set_missing_host_key_policy(self, policy):
+            pass
+
+        def connect(self, **kwargs):
+            self.connect_kwargs = kwargs
+
+        def exec_command(self, command, timeout=None):
+            self.command = command
+            return self.stdin, FakeStream(), FakeStream()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("paramiko.SSHClient", FakeClient)
+    settings = SimpleNamespace(
+        proxmox_ssh_host="host.docker.internal",
+        proxmox_ssh_port=22,
+        proxmox_ssh_user="root",
+        proxmox_ssh_key_file="/run/secrets/key",
+        proxmox_ssh_password=None,
+        proxmox_ssh_known_hosts=None,
+        proxmox_ssh_strict_host_key=False,
+    )
+
+    asyncio.run(ProxmoxHostExecutor(settings).set_container_password(9016, "Secret-123!"))
+
+    assert FakeClient.instance.command == "pct exec 9016 -- chpasswd"
+    assert FakeClient.instance.stdin.writes == ["root:Secret-123!\\n"]
