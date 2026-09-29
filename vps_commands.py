@@ -6,6 +6,7 @@ import secrets
 import discord
 from discord.ext import commands
 
+from config.emoji import e
 from core.components import simple_view
 from proxmox.client import ProxmoxConfig, ProxmoxClient, ProxmoxError
 from proxmox.host_exec import ProxmoxHostExecutionError, ProxmoxHostExecutor
@@ -229,12 +230,57 @@ class VPSCog(commands.Cog):
                 await interaction.response.send_message("Password reset failed: %s" % str(exc), ephemeral=True)
                 return
             panel = self.bot.settings.proxmox_public_url or "Proxmox panel URL is not configured"
+            credential_view = discord.ui.LayoutView(timeout=600)
+            credential_container = discord.ui.Container()
+            credential_container.add_item(discord.ui.TextDisplay(
+                "# %s HelzerX Cloud — VPS Credentials" % e("brand", "◆")
+            ))
+            credential_container.add_item(discord.ui.Separator())
+            credential_container.add_item(discord.ui.TextDisplay(
+                "### %s VPS Ready\n"
+                "Your VPS has been provisioned successfully. Keep these credentials private."
+                % e("node", "▣")
+            ))
+            credential_container.add_item(discord.ui.Separator())
+            credential_container.add_item(discord.ui.TextDisplay(
+                "### %s Connection Details\n"
+                "> **Hostname:** `%s`\n"
+                "> **VMID:** `%s`\n"
+                "> **Node:** `%s`"
+                % (e("code", "▣"), row["hostname"], row["vmid"], node)
+            ))
+            credential_container.add_item(discord.ui.Separator())
+            credential_container.add_item(discord.ui.TextDisplay(
+                "### %s Login Credentials\n"
+                "> **Username:** `root`\n"
+                "> **Password:** `%s`"
+                % (e("star", "★"), new_password)
+            ))
+            credential_container.add_item(discord.ui.Separator())
+            credential_container.add_item(discord.ui.TextDisplay(
+                "### %s Proxmox Panel\n%s"
+                % (e("support", "↗"), panel)
+            ))
+            credential_container.add_item(discord.ui.Separator())
+            credential_container.add_item(discord.ui.TextDisplay(
+                "%s **Security Notice**\n"
+                "This password is shown only to you. Do not share it publicly. "
+                "Change the root password after your first login."
+                % e("warning", "⚠")
+            ))
+            credential_view.add_item(credential_container)
+
+            try:
+                await interaction.user.send(view=credential_view)
+            except discord.Forbidden:
+                await interaction.response.send_message(
+                    "I couldn't DM your VPS credentials. Please enable DMs from server members and try again.",
+                    ephemeral=True,
+                )
+                return
             await interaction.response.send_message(
-                "## HelzerX Cloud — VPS Credentials\n"
-                "**Panel:** %s\n**Node:** `%s`\n**VMID:** `%s`\n\n"
-                "**Username:** `root`\n**Password:** `%s`\n**Hostname:** `%s`\n\n"
-                "Change the password after your first login."
-                % (panel, node, row["vmid"], new_password, row["hostname"]),
+                "%s Your VPS credentials were sent to your DMs."
+                % e("brand", "◆"),
                 ephemeral=True,
             )
 
