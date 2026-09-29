@@ -309,7 +309,9 @@ class Database:
         try:
             await db.executescript(SCHEMA)
             columns = {
-                "vmid": "INTEGER",\n                "os_key": "TEXT",\n                "template_ctid": "INTEGER",
+                "vmid": "INTEGER",
+                "os_key": "TEXT",
+                "template_ctid": "INTEGER",
                 "channel_id": "INTEGER",
                 "message_id": "INTEGER",
                 "progress_stage": "TEXT",
