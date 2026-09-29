@@ -24,24 +24,24 @@ def build_vps_credentials_view(hostname: str, vmid: int, node_name: str, usernam
     container.add_item(discord.ui.TextDisplay("# %s HelzerX Cloud — VPS Credentials" % e("brand", "◆")))
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay(
-        "### %s VPS Ready\\nYour VPS has been provisioned successfully. Keep these credentials private."
+        "### %s VPS Ready\nYour VPS has been provisioned successfully. Keep these credentials private."
         % e("node", "▣")
     ))
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay(
-        "### %s Connection Details\\n> **Hostname:** \`%s\`\\n> **VMID:** \`%s\`\\n> **Node:** \`%s\`"
+        "### %s Connection Details\n> **Hostname:** \`%s\`\n> **VMID:** \`%s\`\n> **Node:** \`%s\`"
         % (e("code", "▣"), hostname, vmid, node_name)
     ))
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay(
-        "### %s Login Credentials\\n> **Username:** \`%s\`\\n> **Password:** \`%s\`"
+        "### %s Login Credentials\n> **Username:** \`%s\`\n> **Password:** \`%s\`"
         % (e("star", "★"), username, password)
     ))
     container.add_item(discord.ui.Separator())
-    container.add_item(discord.ui.TextDisplay("### %s Proxmox Panel\\n%s" % (e("support", "↗"), VPS_PANEL_URL)))
+    container.add_item(discord.ui.TextDisplay("### %s Proxmox Panel\n%s" % (e("support", "↗"), VPS_PANEL_URL)))
     container.add_item(discord.ui.Separator())
     container.add_item(discord.ui.TextDisplay(
-        "%s **Security Notice**\\nThis password is shown only to you. Do not share it publicly. Change the root password after your first login."
+        "%s **Security Notice**\nThis password is shown only to you. Do not share it publicly. Change the root password after your first login."
         % e("warning", "⚠")
     ))
     view.add_item(container)
