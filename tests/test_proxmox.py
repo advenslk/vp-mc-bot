@@ -1,6 +1,6 @@
 import asyncio
 
-from proxmox.client import ProxmoxClient, ProxmoxConfig, ProxmoxConfigurationError
+from proxmox.client import ProxmoxClient, ProxmoxConfig, ProxmoxError, ProxmoxConfigurationError
 
 
 def test_proxmox_url_normalization():
