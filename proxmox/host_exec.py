@@ -122,7 +122,7 @@ class ProxmoxHostExecutor:
             client.close()
 
     def _create_panel_user(self, vmid: int, username: str, password: str) -> None:
-        userid = "%s@pve" % username
+        userid = username if "@" in username else "%s@pve" % username
         quoted_user = shlex.quote(userid)
         quoted_password = shlex.quote(password)
         # The username is deterministic per VMID. Remove a stale account first so
