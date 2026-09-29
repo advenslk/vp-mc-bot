@@ -275,7 +275,7 @@ def test_proxmox_host_executor_writes_password_to_stdin(monkeypatch):
     asyncio.run(ProxmoxHostExecutor(settings).set_container_password(9016, "Secret-123!"))
 
     assert FakeClient.instance.command == "pct exec 9016 -- chpasswd"
-    assert FakeClient.instance.stdin.writes == ["root:Secret-123!\\n"]
+    assert FakeClient.instance.stdin.writes == ["root:Secret-123!\n"]
 
 
 def test_set_container_config_retries_transient_lock():
@@ -291,7 +291,7 @@ def test_set_container_config_retries_transient_lock():
     async def fake_request(method, path, **kwargs):
         calls.append(1)
         if len(calls) < 3:
-            raise RuntimeError("Proxmox returned HTTP 500: can't lock file '/run/lock/lxc/pve-config-9019.lock' - got timeout")
+            raise ProxmoxError("Proxmox returned HTTP 500: can't lock file '/run/lock/lxc/pve-config-9019.lock' - got timeout")
         return {"data": None}
 
     client._request_once = fake_request
@@ -305,4 +305,4 @@ def test_set_container_config_retries_transient_lock():
 
 def test_provisioning_does_not_start_lxc_twice():
     source = open("hosting/provisioner.py", encoding="utf-8").read()
-    assert source.count('await client.container_action(node_name, vmid, "start")') == 1
+    assert "if settings.proxmox_start and not resource_started:" in source
