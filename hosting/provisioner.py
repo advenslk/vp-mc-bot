@@ -403,8 +403,7 @@ class ProvisioningService:
                 user = None
         if user:
             try:
-                dm = user.dm_channel or await user.create_dm()
-                await dm.send(
+                await user.send(
                     view=build_vps_credentials_view(
                         hostname, int(vmid), str(node_name), vps_username, vps_password,
                         "%s@pve" % panel_username, panel_password,
@@ -417,7 +416,7 @@ class ProvisioningService:
                 )
                 await self.progress(
                     job_id, plan_key, "Completed", 100,
-                    "VPS is ready, but Discord could not deliver the private DM. Run .vps-password %s to securely generate a new VPS password." % server_id,
+                    ("VPS is ready, but Discord could not deliver the private DM. " "Run .vps-password %s to securely generate fresh VPS + Proxmox panel credentials. " "Discord error: %s" % (server_id, getattr(exc, "code", "unknown"))),
                     "completed",
                 )
                 return
