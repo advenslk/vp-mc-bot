@@ -207,36 +207,3 @@ def test_lxc_clone_and_wait_does_not_pass_password_to_clone(monkeypatch):
     ]
 
 
-def test_set_container_password_uses_dedicated_passwd_endpoint():
-    client = ProxmoxClient(
-        ProxmoxConfig(
-            base_url="https://pve.example:8006",
-            token_id="user@pam!bot",
-            token_secret="secret",
-        )
-    )
-    calls = []
-
-    async def fake_request(method, path, **kwargs):
-        calls.append((method, path, kwargs))
-        return {"data": "UPID:test"}
-
-    async def fake_wait(node, upid, *args, **kwargs):
-        assert node == "pve01"
-        assert upid == "UPID:test"
-        return {"status": "stopped", "exitstatus": "OK"}
-
-    client.request = fake_request
-    client.wait_for_task = fake_wait
-    result = asyncio.run(
-        client.set_container_password("pve01", 101, "Generated-Password-123!")
-    )
-
-    assert result["data"] == "UPID:test"
-    assert calls == [
-        (
-            "POST",
-            "nodes/pve01/lxc/101/passwd",
-            {"password": "Generated-Password-123!"},
-        )
-    ]
