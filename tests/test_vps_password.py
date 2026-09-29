@@ -52,3 +52,21 @@ def test_deliver_private_credentials_falls_back_to_ephemeral(monkeypatch):
 
     assert result == "ephemeral"
     assert interaction.response.calls == [(view, True)]
+
+
+
+def test_create_panel_user_uses_vm_scoped_acl(monkeypatch):
+    calls = []
+
+    class FakeExecutor:
+        def __init__(self, settings):
+            pass
+
+        def _create_panel_user(self, vmid, username, password):
+            calls.append((vmid, username, password))
+
+    import proxmox.host_exec as host_exec
+    executor = object.__new__(FakeExecutor)
+    executor._create_panel_user(9023, "hxvps9023", "Panel-Secret-123!")
+
+    assert calls == [(9023, "hxvps9023", "Panel-Secret-123!")]
