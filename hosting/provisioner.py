@@ -6,6 +6,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from proxmox.client import ProxmoxClient, ProxmoxConfig, ProxmoxError, ProxmoxConfigurationError
+from proxmox.host_exec import ProxmoxHostExecutor
 from minecraft.client import PterodactylClient, PterodactylConfig, PterodactylError
 from core.components import provisioning_view
 
@@ -220,7 +221,6 @@ class ProvisioningService:
                 settings.proxmox_storage,
                 full=True,
             )
-            await client.set_container_password(node_name, vmid, vps_password)
             target_storage_gb = int(row["storage_gb"] or 0)
             if target_storage_gb > 0:
                 rootfs = await client.container_config(node_name, vmid)
@@ -260,7 +260,12 @@ class ProvisioningService:
             if settings.proxmox_bridge:
                 config["net0"] = "name=eth0,bridge=%s,ip=dhcp" % settings.proxmox_bridge
             await client.set_container_config(node_name, vmid, config)
-            await self.progress(job_id, plan_key, "Applying resources", 70, "Applying RAM, CPU, hostname, network and VPS credentials.")
+            await self.progress(job_id, plan_key, "Applying resources", 70, "Applying RAM, CPU, hostname and network configuration.")
+            await client.container_action(node_name, vmid, "start")
+            await self.progress(job_id, plan_key, "Setting password", 78, "Setting the private root password inside the new LXC.")
+            await ProxmoxHostExecutor(settings).set_container_password(vmid, vps_password)
+            if not settings.proxmox_start:
+                await client.container_action(node_name, vmid, "stop")
             kind = "vps"
         else:
             await self.progress(job_id, plan_key, "Creating VPS", 50, "Cloning the prepared VM template into VMID `%s`." % vmid)
