@@ -45,6 +45,9 @@ class Settings:
     proxmox_token_secret: str | None
     proxmox_template_vmid: int | None
     proxmox_template_ctid: int | None
+    proxmox_ubuntu_2204_template_ctid: int | None
+    proxmox_ubuntu_2404_template_ctid: int | None
+    proxmox_almalinux_9_template_ctid: int | None
     proxmox_storage: str | None
     proxmox_bridge: str
     proxmox_start: bool
